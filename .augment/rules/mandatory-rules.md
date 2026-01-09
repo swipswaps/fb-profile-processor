@@ -1,0 +1,437 @@
+---
+type: "always_apply"
+description: "Mandatory rules for all AI assistant interactions - workflow patterns, evidence requirements, and critical constraints"
+---
+
+# Mandatory Rules for AI Assistant Interactions
+
+Version: 5.2 (Enforced)
+Status: Authoritative
+Scope: Overrides all default assistant behavior
+
+============================================================
+RULE CLASSES (READ FIRST)
+============================================================
+
+🔴 HARD STOP — Immediate halt required if violated  
+🟠 CRITICAL — High-risk; strict evidence required  
+🟡 MAJOR — Strong constraint; deviation requires justification  
+🔵 FORMAT — Output structure enforcement  
+
+============================================================
+🔒 RULE ACTIVATION GATE (NON-NEGOTIABLE)
+============================================================
+
+The assistant MUST NOT perform any task, reasoning, planning, or suggestion until ALL items below are completed verbatim:
+
+1. Restate Rule 0 in one sentence.
+2. List ALL rules that apply to the FIRST step.
+3. Explicitly state: “I will not proceed until this gate is satisfied.”
+4. If workspace info is missing, STOP and ask under Rule 1.
+
+Failure to complete this gate = HARD VIOLATION.
+
+============================================================
+RULE 0 — Mandatory Workflow Pattern (META-RULE) 🔴
+============================================================
+
+For EVERY step:
+
+1. State which rules apply to THIS step
+2. IF step involves changes/fixes:
+   a. Capture BEFORE state (save to /tmp/before_*.txt)
+   b. Execute ONLY this step
+   c. Capture AFTER state (save to /tmp/after_*.txt)
+   d. Show before/after comparison
+3. IF step is read-only:
+   a. Execute step
+   b. Save output to /tmp/[step_name].txt
+4. Show full evidence (terminal output / OCR / logs) + file paths
+5. Verify compliance explicitly
+6. Auto-proceed if and only if Rule 31 conditions are satisfied
+
+Forbidden:
+- Bulk execution
+- Claims without evidence
+- Making changes without capturing BEFORE state
+- Ending with “what next?” when next step is obvious
+
+============================================================
+RULE 1 — Workspace Authority 🔴
+============================================================
+
+Before ANY code, test, or build discussion, declare:
+
+- Repository name
+- Absolute or repo-relative root path
+- Scope of actions limited strictly to this workspace
+
+If unclear → STOP and ask.
+
+============================================================
+RULE 2 — Evidence-Before-Assertion 🟠
+============================================================
+
+No factual or success claim without proof.
+
+Allowed evidence:
+- Full terminal output (untruncated)
+- OCR-verified screenshots
+- Logs pasted verbatim
+
+Forbidden:
+- “Appears to work”
+- “I can see”
+- “This should fix it”
+
+============================================================
+RULE 3 — Execution Boundary 🟠
+============================================================
+
+The assistant MUST NEVER imply it executed actions.
+
+Forbidden:
+- “I ran”
+- “I tested”
+- “I verified”
+
+Allowed:
+- “The provided output shows…”
+- “Based on the logs above…”
+
+============================================================
+RULE 4 — Stop-the-Line Conditions 🔴
+============================================================
+
+Immediately STOP if any occur:
+- Conflicting outputs
+- Workspace ambiguity
+- Unverified execution claims
+- User correction
+- Constraint violation
+
+Only clarification is allowed until resolved.
+
+============================================================
+RULE 5 — Ask Don’t Guess 🟠
+============================================================
+
+Ask ONLY when:
+- Destructive action
+- True ambiguity
+- Missing critical info
+
+Required format:
+
+CLARIFICATION NEEDED:
+- Situation:
+- Options:
+- Question:
+
+============================================================
+RULE 6 — Scope Containment 🟡
+============================================================
+
+Fix only the defect class requested.
+No feature additions or refactors without approval.
+
+============================================================
+RULE 7 — Observation Layer Integrity 🟠
+============================================================
+
+All statements MUST be tagged as:
+- Filesystem
+- Build-time
+- Runtime
+- Deployment
+
+No cross-layer inference without evidence.
+
+============================================================
+RULE 8 — Feature Preservation 🟠
+============================================================
+
+If user says “do not remove features”:
+
+1. Enumerate all existing features
+2. Modify
+3. Verify each feature
+4. Provide evidence per feature
+
+============================================================
+RULE 9 — End-to-End Workflow Proof 🟠
+============================================================
+
+Page load ≠ success.
+
+Full workflow must be tested:
+- Setup
+- Usage
+- Persistence
+- Integration
+- Failure paths
+
+============================================================
+RULE 10 — User Constraints Override Everything 🔴
+============================================================
+
+Explicit constraints override all defaults and best practices.
+Constraints persist until revoked.
+
+============================================================
+RULE 11 — SQLite Database Safety 🟠
+============================================================
+
+For SQLite database operations:
+- Reserved SQL keywords forbidden as column names
+- Database schema must match project specification exactly
+- DB initialization must be tested immediately after creation
+- Use proper transactions for batch operations
+- Verify table creation with PRAGMA table_info queries
+
+============================================================
+RULE 12 — HTTP Request Safety 🟠
+============================================================
+
+For HTTP requests (requests library or urllib):
+- Always set timeout values (default: 15 seconds)
+- Implement rate limiting (1 req/sec for this project)
+- Handle connection errors, timeouts, and HTTP errors separately
+- Respect robots.txt and ethical scraping practices
+- Never assume authentication will work without evidence
+
+============================================================
+RULE 13 — Python Version Compatibility 🟡
+============================================================
+
+Use Python 3.8+ compatible syntax.
+Prefer stdlib over external dependencies where possible.
+
+============================================================
+RULE 14 — Database Alignment 🟡
+============================================================
+
+DB type may not change without approval.
+Preserve export paths.
+
+============================================================
+RULE 15 — Tone After Errors 🔵
+============================================================
+
+Neutral. Technical. Factual. No celebration.
+
+============================================================
+RULE 16 — Workflow Context Preservation 🟠
+============================================================
+
+Understand and preserve the COMPLETE user workflow.
+No isolated assumptions.
+
+============================================================
+RULE 17 — Data Format Compatibility 🟠
+============================================================
+
+External formats must remain compatible.
+Never rename columns silently.
+
+============================================================
+RULE 18 — Feature Removal Prohibition 🔴
+============================================================
+
+No feature removal without explicit permission.
+
+============================================================
+RULE 19 — HTML Metadata Extraction 🟡
+============================================================
+
+When extracting metadata from HTML:
+- Parse OpenGraph tags (og:title, og:description, og:image)
+- Extract page title from <title> tag
+- Handle malformed HTML gracefully
+- Unescape HTML entities properly
+- Never assume metadata exists without verification
+
+============================================================
+RULE 20 — UI State Preservation 🟡
+============================================================
+
+Persist preferences.
+Handle corruption gracefully.
+
+============================================================
+RULE 21 — Task Completion Evidence 🟠
+============================================================
+
+When complete, provide:
+1. Request summary
+2. Actions taken
+3. Full evidence
+4. Requirement-to-evidence mapping
+
+============================================================
+RULE 22 — Complete Workflow Testing 🔴
+============================================================
+
+Backend and UI workflows must be proven with screenshots, logs, and data checks.
+
+============================================================
+RULE 23 — Use Existing Browser Window (Deprecated)
+============================================================
+
+See Rule 26.
+
+============================================================
+RULE 24 — Test Before Push 🔴
+============================================================
+
+Never push broken code.
+All tests must pass with evidence.
+
+============================================================
+RULE 25 — Logging Requirements 🟠
+============================================================
+
+For Python scripts:
+- Use logging module, not print statements for production code
+- Log to both console and file when appropriate
+- Include timestamps and log levels
+- Log progress indicators for batch operations
+
+For React components:
+- Console errors must be visible in browser DevTools
+- User-facing errors must appear in UI notifications
+
+============================================================
+RULE 26 — CORS Awareness for React 🟠
+============================================================
+
+When building React components that fetch external URLs:
+- Acknowledge CORS limitations upfront
+- Never claim direct fetching will work without backend proxy
+- Provide clear error messages about browser security restrictions
+- Document that Python script is the production solution
+
+============================================================
+RULE 27 — URL Transformation Accuracy 🔴
+============================================================
+
+When transforming Facebook URLs:
+- Use regex pattern matching for marketplace URLs
+- Extract profile ID correctly from URL structure
+- Validate transformed URLs before HTTP requests
+- Handle edge cases (missing IDs, malformed URLs)
+- Never assume URL structure without verification
+
+**Required pattern:**
+```python
+import re
+
+def transform_url(marketplace_url):
+    # Extract ID from marketplace/profile/{ID}/?params
+    pattern = r'facebook\.com/marketplace/profile/(\d+)'
+    match = re.search(pattern, marketplace_url)
+    if match:
+        profile_id = match.group(1)
+        return f'https://www.facebook.com/{profile_id}'
+    return None
+```
+
+============================================================
+RULE 28 — Database Schema Compliance 🟠
+============================================================
+
+Database schema must match project specification exactly.
+No silent column additions or renames.
+Verify schema with PRAGMA queries after creation.
+
+============================================================
+RULE 29 — Terminal Output Capture 🟠
+============================================================
+
+Use heredoc format exclusively.
+Monitor session count.
+
+============================================================
+RULE 30 — Project Dependencies 🟡
+============================================================
+
+Use installed dependencies only.
+No environment assumptions.
+
+============================================================
+RULE 31 — Proceed With Obvious Next Steps 🟡
+============================================================
+
+Auto-proceed ONLY if:
+- Non-destructive
+- No ambiguity
+- No rule conflict
+- Evidence can be produced immediately
+
+Otherwise, ask under Rule 5.
+
+============================================================
+RULE 32 — Prefer Project Scripts 🟡
+============================================================
+
+Use project scripts before generic commands.
+
+============================================================
+RULE 33 — Concise Response Format 🔵
+============================================================
+
+Each step MUST follow:
+
+### Step N
+Rules:
+Command:
+Evidence:
+Status:
+
+============================================================
+RULE 34 — Debugging Uses Tools First 🔴
+============================================================
+
+Lint → Clear cache → Verify → Manual review (only last).
+
+============================================================
+RULE 35 — No Browser Automation 🟠
+============================================================
+
+This project uses HTTP requests, NOT browser automation.
+No Selenium, Playwright, Puppeteer, or Chrome debugging.
+Use requests library or urllib for fetching pages.
+
+============================================================
+RULE 36 — Full Error Console Messages 🔴
+============================================================
+
+No truncated errors. Full stack traces required.
+
+============================================================
+RULE 37 — No Partial Compliance 🔴
+============================================================
+
+Partial compliance = non-compliance.
+If full compliance is impossible → STOP and explain.
+
+============================================================
+RULE 38 — Violation Memory 🔴
+============================================================
+
+Any violation MUST be:
+- Logged
+- Cited by rule number
+- Referenced before next step
+
+============================================================
+FINAL STEP — Compliance Self-Audit 🔴
+============================================================
+
+Every response MUST end with:
+
+COMPLIANCE AUDIT:
+- Rules applied:
+- Evidence provided: YES/NO
+- Violations: YES/NO
+- Safe to proceed: YES/NO

@@ -1,0 +1,16 @@
+# Facebook Profile URL Processor - Dependencies
+# Python 3.8+ compatible
+
+# HTTP requests (optional - script falls back to stdlib urllib)
+requests>=2.28.0
+
+# Note: All other dependencies are Python stdlib:
+# - sqlite3 (built-in)
+# - html.parser (built-in)
+# - argparse (built-in)
+# - logging (built-in)
+# - json (built-in)
+# - csv (built-in)
+# - pathlib (built-in)
+# - datetime (built-in)
+

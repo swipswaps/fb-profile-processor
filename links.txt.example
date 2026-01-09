@@ -1,0 +1,15 @@
+# Facebook Marketplace Profile URLs
+# One URL per line
+# Lines starting with # are comments and will be ignored
+
+https://www.facebook.com/marketplace/profile/123456789/?ref=share
+https://www.facebook.com/marketplace/profile/987654321/?param=value
+https://www.facebook.com/marketplace/profile/555555555/
+
+# You can add more URLs below
+# The script will automatically:
+# 1. Transform URLs to clean format (https://www.facebook.com/{ID})
+# 2. Fetch metadata via HTTP
+# 3. Store results in SQLite database
+# 4. Skip already-processed URLs (deduplication)
+
