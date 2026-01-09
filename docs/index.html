@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Profile URL Processor</title>
+    <meta name="description" content="Transform Facebook Marketplace profile URLs and extract metadata">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            color: white;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 2rem;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+        
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 1rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .results {
+            margin-top: 2rem;
+        }
+        
+        .result-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
+        }
+        
+        .result-item.error {
+            border-left-color: #e74c3c;
+            background: #fee;
+        }
+        
+        .result-item.success {
+            border-left-color: #27ae60;
+            background: #efe;
+        }
+        
+        .url-display {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+        }
+        
+        .original {
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        
+        .transformed {
+            color: #27ae60;
+            font-weight: 600;
+        }
+        
+        .error-msg {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔗 FB Profile Processor</h1>
+            <p class="subtitle">Transform Facebook Marketplace URLs instantly</p>
+        </header>
+
+        <div class="card">
+            <h2 class="section-title">📥 Input URLs</h2>
+            <div class="input-group">
+                <label for="urlInput">Paste Facebook Marketplace profile URLs (one per line):</label>
+                <textarea
+                    id="urlInput"
+                    placeholder="https://www.facebook.com/marketplace/profile/123456789/?ref=share&#10;https://www.facebook.com/marketplace/profile/987654321/&#10;..."
+                ></textarea>
+            </div>
+            <button class="btn" onclick="processURLs()">🚀 Transform URLs</button>
+        </div>
+
+        <div id="statsContainer" style="display: none;">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalCount">0</div>
+                    <div class="stat-label">Total URLs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="successCount">0</div>
+                    <div class="stat-label">Successful</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="errorCount">0</div>
+                    <div class="stat-label">Errors</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsContainer" style="display: none;">
+            <div class="card">
+                <h2 class="section-title">📊 Results</h2>
+                <div id="results" class="results"></div>
+                <button class="btn" onclick="exportResults()" style="margin-top: 1rem;">💾 Export as JSON</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let processedResults = [];
+
+        function transformURL(url) {
+            const match = url.match(/marketplace\/profile\/(\d+)/);
+            if (match) {
+                return {
+                    clean: `https://www.facebook.com/${match[1]}`,
+                    id: match[1],
+                    valid: true
+                };
+            }
+            return { clean: null, id: null, valid: false };
+        }
+
+        function processURLs() {
+            const input = document.getElementById('urlInput').value;
+            const urls = input.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+
+            if (urls.length === 0) {
+                alert('Please enter at least one URL');
+                return;
+            }
+
+            processedResults = [];
+            let successCount = 0;
+            let errorCount = 0;
+
+            urls.forEach((url, index) => {
+                const result = transformURL(url);
+                const item = {
+                    id: index + 1,
+                    original_url: url,
+                    clean_url: result.clean,
+                    profile_id: result.id,
+                    valid: result.valid,
+                    timestamp: new Date().toISOString()
+                };
+
+                processedResults.push(item);
+
+                if (result.valid) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            });
+
+            // Update stats
+            document.getElementById('totalCount').textContent = urls.length;
+            document.getElementById('successCount').textContent = successCount;
+            document.getElementById('errorCount').textContent = errorCount;
+            document.getElementById('statsContainer').style.display = 'block';
+
+            // Display results
+            displayResults();
+        }
+
+        function displayResults() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            processedResults.forEach(item => {
+                const div = document.createElement('div');
+                div.className = `result-item ${item.valid ? 'success' : 'error'}`;
+
+                if (item.valid) {
+                    div.innerHTML = `
+                        <div class="url-display original">📍 Original: ${item.original_url}</div>
+                        <div class="url-display transformed">✅ Transformed: ${item.clean_url}</div>
+                        <div style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;">Profile ID: ${item.profile_id}</div>
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <div class="url-display original">📍 Original: ${item.original_url}</div>
+                        <div class="error-msg">❌ Invalid URL format (not a marketplace profile URL)</div>
+                    `;
+                }
+
+                resultsDiv.appendChild(div);
+            });
+
+            document.getElementById('resultsContainer').style.display = 'block';
+        }
+
+        function exportResults() {
+            const dataStr = JSON.stringify(processedResults, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `fb_profiles_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
+

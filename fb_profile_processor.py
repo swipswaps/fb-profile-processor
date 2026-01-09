@@ -26,7 +26,7 @@ import logging
 import json
 import csv
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from html import unescape
 
@@ -191,7 +191,7 @@ def fetch_profile(url, timeout=15):
                 "page_title": parser.title,
                 "og_title": parser.og_title,
                 "og_description": parser.og_description,
-                "fetched_at": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                "fetched_at": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                 "error": None
             }
 
@@ -211,7 +211,7 @@ def fetch_profile(url, timeout=15):
                     "page_title": None,
                     "og_title": None,
                     "og_description": None,
-                    "fetched_at": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                    "fetched_at": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                     "error": error_msg
                 }
 
@@ -411,7 +411,7 @@ Examples:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 url, None, None, None, None, None,
-                datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                 'Invalid URL format: not a marketplace profile URL'
             ))
             conn.commit()
