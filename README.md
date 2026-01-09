@@ -15,6 +15,12 @@ A production-ready Python tool that transforms Facebook Marketplace profile URLs
 ✅ **Dual Logging** - Console + file output  
 ✅ **Error Handling** - Comprehensive exception management  
 
+## 🌐 Live Demo
+
+**Try the web interface:** [https://swipswaps.github.io/fb-profile-processor/](https://swipswaps.github.io/fb-profile-processor/)
+
+The web interface provides instant URL transformation without any installation!
+
 ## Requirements
 
 - Python 3.8 or higher
@@ -24,7 +30,7 @@ A production-ready Python tool that transforms Facebook Marketplace profile URLs
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/fb-profile-processor.git
+git clone https://github.com/swipswaps/fb-profile-processor.git
 cd fb-profile-processor
 
 # Install dependencies (optional but recommended)
@@ -168,6 +174,18 @@ FROM profiles;
 - **Public Data Only** - No authentication or private profile access
 - **Rate Limiting Required** - Respects ethical scraping practices
 - **CORS in Browser** - React UI is prototype only; Python script is production solution
+
+## 🚀 GitHub Pages Setup
+
+To enable the web interface on GitHub Pages:
+
+1. Go to repository **Settings** → **Pages**
+2. Under **Source**, select:
+   - Branch: `main`
+   - Folder: `/docs`
+3. Click **Save**
+4. Wait 1-2 minutes for deployment
+5. Access at: `https://swipswaps.github.io/fb-profile-processor/`
 
 ## License
 
