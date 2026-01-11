@@ -1,19 +1,35 @@
 # Facebook Profile URL Processor
 
-A production-ready Python tool that transforms Facebook Marketplace profile URLs, fetches metadata via HTTP requests, and stores results in a SQLite database.
+A production-ready Python tool that transforms Facebook Marketplace profile URLs, fetches metadata, and stores results in a SQLite database.
+
+## Two-Stage Architecture
+
+### Stage 1: HTTP Collection (`fb_profile_processor.py`)
+Fast bulk URL collection using HTTP requests - no authentication required.
+
+### Stage 2: Browser Enrichment (`browser_enricher.py`)
+Resolves numeric IDs to usernames and extracts full profile data using Playwright.
 
 ## Features
 
-✅ **URL Transformation** - Converts marketplace URLs to clean profile format  
-✅ **HTTP Metadata Extraction** - Fetches page titles and OpenGraph tags  
-✅ **SQLite Storage** - Structured database with deduplication  
-✅ **Resume Capability** - Skip already-processed URLs  
-✅ **Retry Logic** - Exponential backoff for failed requests  
-✅ **Rate Limiting** - Configurable delay between requests (default: 1 req/sec)  
-✅ **Export Formats** - JSON, CSV, and SQL dump  
-✅ **Progress Tracking** - Real-time percentage indicators  
-✅ **Dual Logging** - Console + file output  
-✅ **Error Handling** - Comprehensive exception management  
+### Stage 1 (HTTP Collection)
+✅ **URL Transformation** - Converts marketplace URLs to clean profile format
+✅ **HTTP Metadata Extraction** - Fetches page titles and OpenGraph tags
+✅ **SQLite Storage** - Structured database with deduplication
+✅ **Resume Capability** - Skip already-processed URLs
+✅ **Retry Logic** - Exponential backoff for failed requests
+✅ **Rate Limiting** - Configurable delay between requests (default: 1 req/sec)
+✅ **Export Formats** - JSON, CSV, and SQL dump
+✅ **Progress Tracking** - Real-time percentage indicators
+✅ **Dual Logging** - Console + file output
+✅ **Error Handling** - Comprehensive exception management
+
+### Stage 2 (Browser Enrichment)
+✅ **Profile Resolution** - Numeric ID → username URL (e.g., `100000563858165` → `kristi.sutphin.9`)
+✅ **Full Profile Data** - Name, bio, location, followers, profile picture
+✅ **Existing Session** - Connects to your logged-in Chrome (no new login needed)
+✅ **Incremental Enrichment** - Process profiles in batches, resume anytime
+✅ **Human-like Delays** - Random delays (2-4 seconds) to avoid detection
 
 ## 🌐 Live Demo
 
@@ -24,7 +40,8 @@ The web interface provides instant URL transformation without any installation!
 ## Requirements
 
 - Python 3.8 or higher
-- `requests` library (optional, falls back to stdlib `urllib`)
+- `requests` library (optional for Stage 1, falls back to stdlib `urllib`)
+- `playwright` library (required for Stage 2)
 
 ## Installation
 
@@ -33,13 +50,16 @@ The web interface provides instant URL transformation without any installation!
 git clone https://github.com/swipswaps/fb-profile-processor.git
 cd fb-profile-processor
 
-# Install dependencies (optional but recommended)
+# Install dependencies
 pip install -r requirements.txt
+
+# Install Playwright browsers (for Stage 2)
+playwright install chromium
 ```
 
 ## Usage
 
-### Basic Usage
+### Stage 1: HTTP Collection (Fast Bulk Processing)
 
 ```bash
 # Process URLs from links.txt (default)
@@ -50,6 +70,48 @@ python3 fb_profile_processor.py --input my_urls.txt
 
 # Custom output database
 python3 fb_profile_processor.py --output my_database.db
+
+# Export results
+python3 fb_profile_processor.py --export-json results.json --export-csv results.csv
+```
+
+### Stage 2: Browser Enrichment (Detailed Profile Data)
+
+**Step 1: Launch Chrome with Remote Debugging**
+
+```bash
+# Close ALL Chrome windows first, then:
+
+# Linux:
+google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/google-chrome"
+
+# macOS:
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/Library/Application Support/Google/Chrome"
+
+# Windows:
+"C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+  --remote-debugging-port=9222 ^
+  --user-data-dir="%USERPROFILE%\AppData\Local\Google\Chrome\User Data"
+```
+
+**Step 2: Log into Facebook** in that Chrome window (normal login, stays logged in)
+
+**Step 3: Run Browser Enrichment**
+
+```bash
+# Enrich all pending profiles
+python3 browser_enricher.py --database test_profiles.db
+
+# Limit to first 10 profiles (for testing)
+python3 browser_enricher.py --database test_profiles.db --limit 10
+
+# Custom delay between requests (default: 3 seconds)
+python3 browser_enricher.py --database test_profiles.db --delay 5.0
+
+# Verbose logging
+python3 browser_enricher.py --database test_profiles.db --verbose
 ```
 
 ### Advanced Options
