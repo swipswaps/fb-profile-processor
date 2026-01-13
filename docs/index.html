@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FB Profile Processor</title>
-    <meta name="description" content="Transform Facebook Marketplace profile URLs and extract metadata">
+    <title>FB Profile Processor - Docker Setup</title>
+    <meta name="description" content="Process Facebook Marketplace profiles - Guided Docker setup">
     <style>
         * {
             margin: 0;
@@ -21,25 +21,25 @@
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 900px;
             margin: 0 auto;
         }
         
         header {
             text-align: center;
-            margin-bottom: 3rem;
+            margin-bottom: 2rem;
             color: white;
         }
         
         h1 {
-            font-size: 3rem;
+            font-size: 2.5rem;
             margin-bottom: 0.5rem;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
         }
         
         .subtitle {
-            font-size: 1.2rem;
-            opacity: 0.9;
+            font-size: 1.1rem;
+            opacity: 0.95;
         }
         
         .card {
@@ -47,61 +47,168 @@
             border-radius: 1rem;
             padding: 2rem;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 2rem;
-        }
-        
-        .section-title {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: #667eea;
-        }
-        
-        .input-group {
             margin-bottom: 1.5rem;
         }
         
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: #555;
-        }
-        
-        textarea {
-            width: 100%;
-            min-height: 150px;
-            padding: 1rem;
-            border: 2px solid #e0e0e0;
+        .status-check {
+            display: flex;
+            align-items: center;
+            padding: 1.5rem;
             border-radius: 0.5rem;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            resize: vertical;
+            margin-bottom: 1rem;
+            gap: 1rem;
+            font-weight: 500;
         }
         
-        textarea:focus {
-            outline: none;
+        .status-checking {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .status-icon {
+            font-size: 2rem;
+            min-width: 40px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #ffc107;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .setup-step {
+            padding: 1.5rem;
+            border-left: 3px solid #e0e0e0;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+        
+        .setup-step.completed {
+            border-left-color: #28a745;
+        }
+        
+        .setup-step.active {
+            border-left-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .step-number {
+            position: absolute;
+            left: -18px;
+            top: 1.5rem;
+            background: white;
+            border: 3px solid #e0e0e0;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #666;
+        }
+        
+        .setup-step.completed .step-number {
+            background: #28a745;
+            border-color: #28a745;
+            color: white;
+        }
+        
+        .setup-step.active .step-number {
+            background: #667eea;
             border-color: #667eea;
+            color: white;
+        }
+        
+        .step-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .step-description {
+            color: #666;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        
+        .code-box {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            position: relative;
+            margin: 0.5rem 0;
+        }
+        
+        .code-box code {
+            display: block;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.3rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: background 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: #5568d3;
         }
         
         .btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 1rem 2rem;
+            padding: 0.8rem 1.5rem;
             border-radius: 0.5rem;
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.2s;
+            display: inline-block;
+            text-decoration: none;
+            margin-top: 0.5rem;
         }
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
         
-        .btn:active {
-            transform: translateY(0);
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
         }
         
         .btn:disabled {
@@ -109,72 +216,59 @@
             cursor: not-allowed;
         }
         
-        .results {
-            margin-top: 2rem;
-        }
-        
-        .result-item {
-            background: #f8f9fa;
-            border-left: 4px solid #667eea;
+        .alert {
             padding: 1rem;
-            margin-bottom: 1rem;
             border-radius: 0.5rem;
+            margin: 1rem 0;
         }
         
-        .result-item.error {
-            border-left-color: #e74c3c;
-            background: #fee;
+        .alert-info {
+            background: #d1ecf1;
+            border: 1px solid #17a2b8;
+            color: #0c5460;
         }
         
-        .result-item.success {
-            border-left-color: #27ae60;
-            background: #efe;
+        .alert-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
         }
         
-        .url-display {
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            word-break: break-all;
-        }
-        
-        .original {
-            color: #666;
-            margin-bottom: 0.5rem;
-        }
-        
-        .transformed {
-            color: #27ae60;
-            font-weight: 600;
-        }
-        
-        .error-msg {
-            color: #e74c3c;
-            font-weight: 600;
-        }
-        
-        .stats {
+        .feature-list {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1rem;
-            margin-bottom: 2rem;
+            margin: 1rem 0;
         }
         
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            text-align: center;
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
         }
         
-        .stat-value {
-            font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
+        .feature-icon {
+            font-size: 1.5rem;
         }
         
-        .stat-label {
-            opacity: 0.9;
+        .hidden {
+            display: none !important;
+        }
+        
+        .progress-bar {
+            background: #e0e0e0;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s ease;
         }
     </style>
 </head>
@@ -182,143 +276,315 @@
     <div class="container">
         <header>
             <h1>🔗 FB Profile Processor</h1>
-            <p class="subtitle">Transform Facebook Marketplace URLs instantly</p>
+            <p class="subtitle">Guided setup for Facebook profile processing</p>
         </header>
 
+        <!-- System Check -->
         <div class="card">
-            <h2 class="section-title">📥 Input URLs</h2>
-            <div class="input-group">
-                <label for="urlInput">Paste Facebook Marketplace profile URLs (one per line):</label>
-                <textarea
-                    id="urlInput"
-                    placeholder="https://www.facebook.com/marketplace/profile/123456789/?ref=share&#10;https://www.facebook.com/marketplace/profile/987654321/&#10;..."
-                ></textarea>
+            <h2 style="margin-bottom: 1rem; color: #667eea;">🔍 System Check</h2>
+            
+            <div id="check-docker" class="status-check status-checking">
+                <div class="spinner"></div>
+                <div>
+                    <strong>Checking Docker...</strong><br>
+                    <span style="font-size: 0.9rem;">Testing if Docker is installed and running</span>
+                </div>
             </div>
-            <button class="btn" onclick="processURLs()">🚀 Transform URLs</button>
-        </div>
 
-        <div id="statsContainer" style="display: none;">
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-value" id="totalCount">0</div>
-                    <div class="stat-label">Total URLs</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="successCount">0</div>
-                    <div class="stat-label">Successful</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="errorCount">0</div>
-                    <div class="stat-label">Errors</div>
+            <div id="check-app" class="status-check status-checking hidden">
+                <div class="spinner"></div>
+                <div>
+                    <strong>Checking Application...</strong><br>
+                    <span style="font-size: 0.9rem;">Testing if FB Profile Processor is running</span>
                 </div>
             </div>
         </div>
 
-        <div id="resultsContainer" style="display: none;">
-            <div class="card">
-                <h2 class="section-title">📊 Results</h2>
-                <div id="results" class="results"></div>
-                <button class="btn" onclick="exportResults()" style="margin-top: 1rem;">💾 Export as JSON</button>
+        <!-- Installation Steps -->
+        <div id="setup-container" class="card hidden">
+            <h2 style="margin-bottom: 1rem; color: #667eea;">📦 Setup Instructions</h2>
+            
+            <div class="progress-bar">
+                <div id="progress" class="progress-fill"></div>
+            </div>
+
+            <!-- Step 1: Install Docker -->
+            <div id="step-install" class="setup-step active">
+                <div class="step-number">1</div>
+                <div class="step-title">Install Docker</div>
+                <div class="step-description">
+                    Docker is required to run FB Profile Processor. Choose your platform:
+                </div>
+                
+                <div class="feature-list">
+                    <a href="https://docs.docker.com/desktop/install/mac-install/" target="_blank" class="btn btn-secondary">
+                        🍎 macOS
+                    </a>
+                    <a href="https://docs.docker.com/desktop/install/windows-install/" target="_blank" class="btn btn-secondary">
+                        🪟 Windows
+                    </a>
+                    <a href="https://docs.docker.com/engine/install/ubuntu/" target="_blank" class="btn btn-secondary">
+                        🐧 Linux
+                    </a>
+                </div>
+
+                <div class="alert alert-info">
+                    After installing Docker, refresh this page to continue.
+                </div>
+
+                <button class="btn" onclick="recheckDocker()">🔄 I've Installed Docker - Recheck</button>
+            </div>
+
+            <!-- Step 2: Clone Repository -->
+            <div id="step-clone" class="setup-step hidden">
+                <div class="step-number">2</div>
+                <div class="step-title">Clone Repository</div>
+                <div class="step-description">
+                    Open your terminal and run:
+                </div>
+                
+                <div class="code-box">
+                    <button class="copy-btn" onclick="copyCode('clone-code')">📋 Copy</button>
+                    <code id="clone-code">git clone https://github.com/swipswaps/fb-profile-processor.git
+cd fb-profile-processor</code>
+                </div>
+
+                <button class="btn" onclick="completeStep(2)">✅ Done - Next Step</button>
+            </div>
+
+            <!-- Step 3: Start Application -->
+            <div id="step-start" class="setup-step hidden">
+                <div class="step-number">3</div>
+                <div class="step-title">Start Application</div>
+                <div class="step-description">
+                    From inside the fb-profile-processor directory, run:
+                </div>
+                
+                <div class="code-box">
+                    <button class="copy-btn" onclick="copyCode('start-code')">📋 Copy</button>
+                    <code id="start-code">docker-compose up -d</code>
+                </div>
+
+                <div class="alert alert-warning">
+                    <strong>⏱️ First Time Setup:</strong> The first run will download Docker images (~500MB). This may take 5-10 minutes depending on your internet connection.
+                </div>
+
+                <button class="btn" onclick="checkApplication()">🔄 Check if Running</button>
+            </div>
+
+            <!-- Step 4: Access Dashboard -->
+            <div id="step-access" class="setup-step hidden">
+                <div class="step-number">4</div>
+                <div class="step-title">Access Dashboard</div>
+                <div class="step-description">
+                    Your FB Profile Processor is now running! Open it in your browser:
+                </div>
+                
+                <div class="code-box">
+                    <code>http://localhost:8501</code>
+                </div>
+
+                <a href="http://localhost:8501" class="btn" target="_blank">🌐 Open Dashboard</a>
+            </div>
+        </div>
+
+        <!-- Already Running -->
+        <div id="already-running" class="card hidden">
+            <div class="status-check status-success">
+                <div class="status-icon">✅</div>
+                <div>
+                    <strong>Application Running!</strong><br>
+                    <span style="font-size: 0.9rem;">FB Profile Processor is already running on your system</span>
+                </div>
+            </div>
+
+            <a href="http://localhost:8501" class="btn" target="_blank" style="margin-top: 1rem;">🌐 Open Dashboard</a>
+
+            <div class="alert alert-info" style="margin-top: 1rem;">
+                <strong>💡 Management Commands:</strong><br>
+                <div class="code-box" style="margin-top: 0.5rem;">
+                    <code># View logs
+docker-compose logs -f
+
+# Restart
+docker-compose restart
+
+# Stop
+docker-compose down</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="card">
+            <h2 style="margin-bottom: 1rem; color: #667eea;">✨ What You Get</h2>
+            
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-icon">🌐</span>
+                    <span>Browser Automation</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🗄️</span>
+                    <span>Database Storage</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📊</span>
+                    <span>Excel Export</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🖼️</span>
+                    <span>Image Download</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📈</span>
+                    <span>Analytics</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🔄</span>
+                    <span>Batch Processing</span>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        let processedResults = [];
+        let currentStep = 0;
+        let dockerInstalled = false;
+        let appRunning = false;
 
-        function transformURL(url) {
-            const match = url.match(/marketplace\/profile\/(\d+)/);
-            if (match) {
-                return {
-                    clean: `https://www.facebook.com/${match[1]}`,
-                    id: match[1],
-                    valid: true
-                };
+        // Check if Docker is installed by trying to reach the app
+        async function checkDocker() {
+            try {
+                const response = await fetch('http://localhost:8501/_stcore/health', {
+                    method: 'GET',
+                    mode: 'no-cors'
+                });
+                dockerInstalled = true;
+                return true;
+            } catch (e) {
+                // Try alternative detection - check if port is accessible
+                return fetch('http://localhost:8501', { method: 'HEAD', mode: 'no-cors' })
+                    .then(() => true)
+                    .catch(() => false);
             }
-            return { clean: null, id: null, valid: false };
         }
 
-        function processURLs() {
-            const input = document.getElementById('urlInput').value;
-            const urls = input.split('\n').map(u => u.trim()).filter(u => u.length > 0);
-
-            if (urls.length === 0) {
-                alert('Please enter at least one URL');
-                return;
+        // Check if application is running
+        async function checkApplication() {
+            const checkElement = document.getElementById('check-app');
+            checkElement.classList.remove('hidden');
+            
+            try {
+                // Try to fetch the health endpoint
+                const response = await fetch('http://localhost:8501/_stcore/health', {
+                    method: 'GET',
+                    mode: 'no-cors'
+                });
+                
+                appRunning = true;
+                showAlreadyRunning();
+            } catch (e) {
+                // Try main page
+                fetch('http://localhost:8501', { method: 'HEAD', mode: 'no-cors' })
+                    .then(() => {
+                        appRunning = true;
+                        showAlreadyRunning();
+                    })
+                    .catch(() => {
+                        checkElement.innerHTML = `
+                            <div class="status-icon">⏳</div>
+                            <div>
+                                <strong>Not running yet</strong><br>
+                                <span style="font-size: 0.9rem;">Make sure you ran: docker-compose up -d</span>
+                            </div>
+                        `;
+                        checkElement.classList.remove('status-checking');
+                        checkElement.classList.add('status-error');
+                        
+                        setTimeout(() => checkElement.classList.add('hidden'), 3000);
+                    });
             }
+        }
 
-            processedResults = [];
-            let successCount = 0;
-            let errorCount = 0;
+        function showAlreadyRunning() {
+            document.getElementById('setup-container').classList.add('hidden');
+            document.getElementById('check-docker').classList.add('hidden');
+            document.getElementById('check-app').classList.add('hidden');
+            document.getElementById('already-running').classList.remove('hidden');
+        }
 
-            urls.forEach((url, index) => {
-                const result = transformURL(url);
-                const item = {
-                    id: index + 1,
-                    original_url: url,
-                    clean_url: result.clean,
-                    profile_id: result.id,
-                    valid: result.valid,
-                    timestamp: new Date().toISOString()
-                };
+        function showSetup() {
+            document.getElementById('check-docker').innerHTML = `
+                <div class="status-icon">❌</div>
+                <div>
+                    <strong>Docker not detected</strong><br>
+                    <span style="font-size: 0.9rem;">Follow the steps below to install and set up</span>
+                </div>
+            `;
+            document.getElementById('check-docker').classList.remove('status-checking');
+            document.getElementById('check-docker').classList.add('status-error');
+            document.getElementById('setup-container').classList.remove('hidden');
+            updateProgress();
+        }
 
-                processedResults.push(item);
+        async function recheckDocker() {
+            const hasDocker = await checkDocker();
+            if (hasDocker) {
+                completeStep(1);
+                checkApplication();
+            } else {
+                alert('Docker still not detected. Please ensure Docker is installed and running, then try again.');
+            }
+        }
 
-                if (result.valid) {
-                    successCount++;
-                } else {
-                    errorCount++;
-                }
+        function completeStep(step) {
+            document.getElementById(`step-${getStepId(step)}`).classList.remove('active');
+            document.getElementById(`step-${getStepId(step)}`).classList.add('completed');
+            
+            const nextStep = step + 1;
+            if (nextStep <= 4) {
+                document.getElementById(`step-${getStepId(nextStep)}`).classList.remove('hidden');
+                document.getElementById(`step-${getStepId(nextStep)}`).classList.add('active');
+                currentStep = nextStep;
+                updateProgress();
+            }
+        }
+
+        function getStepId(step) {
+            const steps = ['install', 'clone', 'start', 'access'];
+            return steps[step - 1];
+        }
+
+        function updateProgress() {
+            const progress = (currentStep / 4) * 100;
+            document.getElementById('progress').style.width = progress + '%';
+        }
+
+        function copyCode(elementId) {
+            const code = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
             });
-
-            // Update stats
-            document.getElementById('totalCount').textContent = urls.length;
-            document.getElementById('successCount').textContent = successCount;
-            document.getElementById('errorCount').textContent = errorCount;
-            document.getElementById('statsContainer').style.display = 'block';
-
-            // Display results
-            displayResults();
         }
 
-        function displayResults() {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
-
-            processedResults.forEach(item => {
-                const div = document.createElement('div');
-                div.className = `result-item ${item.valid ? 'success' : 'error'}`;
-
-                if (item.valid) {
-                    div.innerHTML = `
-                        <div class="url-display original">📍 Original: ${item.original_url}</div>
-                        <div class="url-display transformed">✅ Transformed: ${item.clean_url}</div>
-                        <div style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;">Profile ID: ${item.profile_id}</div>
-                    `;
-                } else {
-                    div.innerHTML = `
-                        <div class="url-display original">📍 Original: ${item.original_url}</div>
-                        <div class="error-msg">❌ Invalid URL format (not a marketplace profile URL)</div>
-                    `;
-                }
-
-                resultsDiv.appendChild(div);
-            });
-
-            document.getElementById('resultsContainer').style.display = 'block';
-        }
-
-        function exportResults() {
-            const dataStr = JSON.stringify(processedResults, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `fb_profiles_${new Date().toISOString().split('T')[0]}.json`;
-            link.click();
-            URL.revokeObjectURL(url);
-        }
+        // Initialize on page load
+        window.addEventListener('load', async () => {
+            const hasDocker = await checkDocker();
+            
+            if (hasDocker) {
+                // Docker detected, check if app is running
+                await checkApplication();
+            } else {
+                // Docker not detected, show setup
+                showSetup();
+            }
+        });
     </script>
 </body>
 </html>
-

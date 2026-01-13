@@ -1,23 +1,38 @@
 # Facebook Profile URL Processor - Dependencies
 # Python 3.8+ compatible
 
-# Stage 1: HTTP requests (optional - script falls back to stdlib urllib)
-requests>=2.28.0
-
-# Stage 2: Browser automation for profile enrichment
-playwright>=1.40.0
-
-# Dashboard UI
-streamlit>=1.52.0
+# Core web framework
+streamlit>=1.28.0
 pandas>=2.0.0
 
-# Note: All other dependencies are Python stdlib:
-# - sqlite3 (built-in)
-# - html.parser (built-in)
-# - argparse (built-in)
-# - logging (built-in)
-# - json (built-in)
-# - csv (built-in)
-# - pathlib (built-in)
-# - datetime (built-in)
+# HTTP requests
+requests>=2.28.0
 
+# Browser automation (both options)
+playwright>=1.40.0  # For playwright_enricher.py
+selenium>=4.15.0    # For selenium_enricher.py (Firefox-based)
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+
+# Excel export
+openpyxl>=3.1.0
+
+# OCR support (for image/text extraction)
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Environment configuration
+python-dotenv>=1.0.0
+
+# Note: stdlib dependencies (included with Python):
+# - sqlite3 (built-in database)
+# - html.parser (built-in HTML parsing)
+# - argparse (built-in CLI parsing)
+# - logging (built-in logging)
+# - json (built-in JSON handling)
+# - csv (built-in CSV handling)
+# - pathlib (built-in path operations)
+# - datetime (built-in date/time)
+# - urllib (built-in HTTP client)
+# - re (built-in regex)
