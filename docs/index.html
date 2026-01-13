@@ -4,924 +4,249 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FB Profile Processor</title>
-    <meta name="description" content="Transform Facebook Marketplace profiles - Full toolset">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        :root {
-            --bg-gradient-start: #667eea;
-            --bg-gradient-end: #764ba2;
-            --card-bg: #ffffff;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --border-color: #e0e0e0;
-            --success-color: #27ae60;
-            --error-color: #e74c3c;
-            --primary-color: #667eea;
-            --warning-color: #f39c12;
-        }
-        
-        [data-theme="dark"] {
-            --bg-gradient-start: #1a202c;
-            --bg-gradient-end: #2d3748;
-            --card-bg: #2d3748;
-            --text-primary: #e2e8f0;
-            --text-secondary: #a0aec0;
-            --border-color: #4a5568;
-            --success-color: #48bb78;
-            --error-color: #fc8181;
-            --primary-color: #667eea;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
-            min-height: 100vh;
-            color: var(--text-primary);
-            transition: background 0.3s;
-        }
-        
-        .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 250px;
-            height: 100vh;
-            background: var(--card-bg);
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-            padding: 2rem 0;
-            overflow-y: auto;
-            transition: all 0.3s;
-            z-index: 1000;
-        }
-        
-        .sidebar-header {
-            padding: 0 1.5rem 2rem;
-            border-bottom: 2px solid var(--border-color);
-        }
-        
-        .sidebar-header h2 {
-            font-size: 1.3rem;
-            color: var(--primary-color);
-            margin-bottom: 0.5rem;
-        }
-        
-        .sidebar-subtitle {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-        
-        .nav-menu {
-            padding: 1rem 0;
-        }
-        
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 1rem 1.5rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: var(--text-primary);
-            border-left: 3px solid transparent;
-        }
-        
-        .nav-item:hover {
-            background: rgba(102, 126, 234, 0.1);
-        }
-        
-        .nav-item.active {
-            background: rgba(102, 126, 234, 0.15);
-            border-left-color: var(--primary-color);
-            color: var(--primary-color);
-            font-weight: 600;
-        }
-        
-        .nav-icon {
-            font-size: 1.3rem;
-        }
-        
-        .docker-badge {
-            background: var(--warning-color);
-            color: white;
-            font-size: 0.7rem;
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.3rem;
-            margin-left: auto;
-        }
-        
-        .main-content {
-            margin-left: 250px;
-            padding: 2rem;
-            min-height: 100vh;
-        }
-        
-        .docker-banner {
-            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-            color: white;
-            padding: 1rem 1.5rem;
-            border-radius: 0.75rem;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        
-        .docker-banner-content {
-            flex: 1;
-            min-width: 250px;
-        }
-        
-        .docker-banner h3 {
-            font-size: 1.1rem;
-            margin-bottom: 0.3rem;
-        }
-        
-        .docker-install-code {
-            background: #000;
-            color: #0f0;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.3rem;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.85rem;
-            display: inline-block;
-            margin-top: 0.3rem;
-        }
-        
-        .copy-install-btn {
-            background: #48bb78;
-            color: white;
-            border: none;
-            padding: 0.6rem 1.2rem;
-            border-radius: 0.4rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .banner-close {
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: white;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 18px;
-        }
-        
-        .page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        
-        .page-title {
-            font-size: 2rem;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        .theme-toggle {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            font-size: 1.2rem;
-        }
-        
-        .card {
-            background: var(--card-bg);
-            border-radius: 1rem;
-            padding: 2rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 2rem;
-        }
-        
-        .section-title {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: var(--primary-color);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .btn-secondary {
-            background: var(--card-bg);
-            color: var(--primary-color);
-            border: 2px solid var(--primary-color);
-        }
-        
-        .disabled-overlay {
-            position: relative;
-            pointer-events: none;
-            opacity: 0.6;
-        }
-        
-        .disabled-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--warning-color);
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            text-align: center;
-            z-index: 10;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-        
-        textarea {
-            width: 100%;
-            min-height: 150px;
-            padding: 1rem;
-            border: 2px solid var(--border-color);
-            border-radius: 0.5rem;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-            background: var(--card-bg);
-            color: var(--text-primary);
-        }
-        
-        input[type="text"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px solid var(--border-color);
-            border-radius: 0.5rem;
-            background: var(--card-bg);
-            color: var(--text-primary);
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-        }
-        
-        .table-container {
-            overflow-x: auto;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        th {
-            background: var(--primary-color);
-            color: white;
-            font-weight: 600;
-        }
-        
-        tr:hover {
-            background: rgba(102, 126, 234, 0.05);
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-        
-        .info-box {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        
-        [data-theme="dark"] .info-box {
-            background: #1e3a5f;
-            border-left-color: #2196f3;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Source Sans Pro", sans-serif; background: #0e1117; color: #fafafa; min-height: 100vh; }
+
+        /* Loading state */
+        #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 1rem; }
+        #loading .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #ff4b4b; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading p { color: #a1a1aa; font-size: 0.875rem; }
+
+        /* Streamlit iframe - takes full viewport */
+        #streamlit-frame { display: none; width: 100vw; height: 100vh; border: none; }
+
+        /* Fallback installer page */
+        #fallback { display: none; }
+        .installer { max-width: 800px; margin: 0 auto; padding: 4rem 2rem; text-align: center; }
+        .installer h1 { font-size: 2.5rem; margin-bottom: 1rem; }
+        .installer h1 span { color: #ff4b4b; }
+        .installer .subtitle { color: #a1a1aa; font-size: 1.125rem; margin-bottom: 3rem; }
+
+        .status-card { background: #1e1e24; border: 1px solid #333; border-radius: 0.75rem; padding: 2rem; margin-bottom: 2rem; text-align: left; }
+        .status-card h2 { font-size: 1.25rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .status-card .status { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: #0e1117; border-radius: 0.5rem; margin-bottom: 1rem; }
+        .status-card .status.offline { border-left: 3px solid #ef4444; }
+        .status-card .status.online { border-left: 3px solid #22c55e; }
+        .status-card .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .status-card .dot.offline { background: #ef4444; animation: pulse 2s infinite; }
+        .status-card .dot.online { background: #22c55e; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .install-options { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 2rem; }
+        .install-option { background: #1e1e24; border: 1px solid #333; border-radius: 0.75rem; padding: 1.5rem; text-align: left; }
+        .install-option h3 { font-size: 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+        .install-option p { color: #a1a1aa; font-size: 0.875rem; margin-bottom: 1rem; }
+        .install-option code { display: block; background: #0e1117; padding: 0.75rem; border-radius: 0.375rem; font-family: monospace; font-size: 0.8rem; color: #22c55e; margin-bottom: 0.75rem; word-break: break-all; }
+        .install-option button { background: #ff4b4b; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; width: 100%; }
+        .install-option button:hover { background: #e03a3a; }
+        .install-option button.secondary { background: transparent; border: 1px solid #555; color: #fafafa; }
+        .install-option button.secondary:hover { background: #333; }
+
+        .retry-section { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #333; }
+        .retry-section button { background: #22c55e; color: #fff; border: none; padding: 0.75rem 2rem; border-radius: 0.5rem; cursor: pointer; font-size: 1rem; font-weight: 600; }
+        .retry-section button:hover { background: #16a34a; }
+        .retry-section p { color: #a1a1aa; font-size: 0.875rem; margin-top: 1rem; }
+
+        .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 3rem; text-align: left; }
+        .feature { background: #1e1e24; border: 1px solid #333; border-radius: 0.5rem; padding: 1rem; }
+        .feature h4 { font-size: 0.875rem; margin-bottom: 0.25rem; }
+        .feature p { color: #a1a1aa; font-size: 0.75rem; }
+
         @media (max-width: 768px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            
-            .sidebar.open {
-                transform: translateX(0);
-            }
-            
-            .main-content {
-                margin-left: 0;
-            }
-            
-            .mobile-menu-btn {
-                display: block;
-            }
+            .install-options, .features { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <h2>👤 FB Profile Processor</h2>
-            <p class="sidebar-subtitle">Full-featured dashboard</p>
-        </div>
-        
-        <nav class="nav-menu">
-            <div class="nav-item active" onclick="showPage('transform')">
-                <span class="nav-icon">🔗</span>
-                <span>URL Transform</span>
-            </div>
-            
-            <div class="nav-item" onclick="showPage('enrich')">
-                <span class="nav-icon">🌐</span>
-                <span>Profile Enrichment</span>
-                <span class="docker-badge">Docker</span>
-            </div>
-            
-            <div class="nav-item" onclick="showPage('database')">
-                <span class="nav-icon">🗄️</span>
-                <span>Database</span>
-                <span class="docker-badge">Docker</span>
-            </div>
-            
-            <div class="nav-item" onclick="showPage('analytics')">
-                <span class="nav-icon">📊</span>
-                <span>Analytics</span>
-            </div>
-            
-            <div class="nav-item" onclick="showPage('export')">
-                <span class="nav-icon">💾</span>
-                <span>Export Data</span>
-            </div>
-            
-            <div class="nav-item" onclick="showPage('settings')">
-                <span class="nav-icon">⚙️</span>
-                <span>Settings</span>
-            </div>
-        </nav>
+    <!-- Loading state while checking Streamlit -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Connecting to Streamlit server...</p>
     </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <!-- Docker Banner -->
-        <div id="dockerBanner" class="docker-banner">
-            <div class="docker-banner-content">
-                <h3>🚀 Unlock Full Features</h3>
-                <p>Install Docker for enrichment, database, and more:</p>
-                <code class="docker-install-code">curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash</code>
-            </div>
-            <button class="copy-install-btn" onclick="copyInstallScript()">📋 Copy</button>
-            <button class="banner-close" onclick="closeBanner()">×</button>
-        </div>
+    <!-- Streamlit iframe - shown when server is running -->
+    <iframe id="streamlit-frame" src="about:blank"></iframe>
 
-        <div class="page-header">
-            <h1 class="page-title" id="pageTitle">URL Transform</h1>
-            <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
-        </div>
+    <!-- Fallback - shown when Streamlit is not running -->
+    <div id="fallback">
+        <div class="installer">
+            <h1>👤 FB Profile <span>Processor</span></h1>
+            <p class="subtitle">Facebook Marketplace profile URL processor with enrichment</p>
 
-        <!-- Page: URL Transform -->
-        <div id="page-transform" class="page-content">
-            <div class="card">
-                <h2 class="section-title">📥 Input URLs</h2>
-                <label>Paste Facebook Marketplace profile URLs (one per line):</label>
-                <textarea id="urlInput" placeholder="https://www.facebook.com/marketplace/profile/123456789/?ref=share"></textarea>
-                <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <button class="btn" onclick="processURLs()">🚀 Transform URLs</button>
-                    <label for="fileInput" class="btn btn-secondary">📁 Import File</label>
-                    <input type="file" id="fileInput" accept=".txt,.csv" onchange="importFile(event)" style="display:none;">
+            <div class="status-card">
+                <h2>🔌 Connection Status</h2>
+                <div class="status offline" id="statusIndicator">
+                    <div class="dot offline"></div>
+                    <div>
+                        <strong>Streamlit Server Offline</strong>
+                        <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">localhost:8501 not responding</p>
+                    </div>
                 </div>
+                <p style="color: #a1a1aa; font-size: 0.875rem;">
+                    The full-featured dashboard requires Streamlit to be running. Choose an install option below:
+                </p>
             </div>
 
-            <div id="transformResults" style="display: none;">
-                <div class="stats">
-                    <div class="stat-card">
-                        <div class="stat-value" id="totalCount">0</div>
-                        <div>Total URLs</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="successCount">0</div>
-                        <div>Successful</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="successRate">0%</div>
-                        <div>Success Rate</div>
-                    </div>
+            <div class="install-options">
+                <div class="install-option">
+                    <h3>🐳 Docker (Recommended)</h3>
+                    <p>One command installs everything including Firefox enrichment.</p>
+                    <code>curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash</code>
+                    <button onclick="copyToClipboard(this, 'curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash')">📋 Copy Install Command</button>
                 </div>
-
-                <div class="card">
-                    <h2 class="section-title">
-                        <span>📊 Results</span>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button class="btn btn-secondary" onclick="exportCSV()">📊 CSV</button>
-                            <button class="btn btn-secondary" onclick="exportJSON()">💾 JSON</button>
-                            <button class="btn btn-secondary" onclick="copyAllURLs()">📋 Copy All</button>
-                        </div>
-                    </h2>
-                    <div id="resultsTable"></div>
+                <div class="install-option">
+                    <h3>🐍 Manual (Python)</h3>
+                    <p>Run directly with Python if you have dependencies installed.</p>
+                    <code>streamlit run dashboard_integrated.py</code>
+                    <button onclick="copyToClipboard(this, 'streamlit run dashboard_integrated.py')">📋 Copy Command</button>
+                    <button class="secondary" style="margin-top: 0.5rem;" onclick="window.open('https://github.com/swipswaps/fb-profile-processor', '_blank')">📖 View README</button>
                 </div>
             </div>
-        </div>
 
-        <!-- Page: Profile Enrichment -->
-        <div id="page-enrich" class="page-content hidden">
-            <div class="card disabled-overlay">
-                <div class="disabled-message">
-                    🐳 Requires Docker<br>
-                    <small>Install Docker to enable this feature</small>
-                </div>
-                <h2 class="section-title">🌐 Profile Enrichment</h2>
-                <div class="info-box">
-                    <strong>What is Profile Enrichment?</strong><br>
-                    Uses Firefox automation to fetch full profile data including:
-                    <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-                        <li>Profile name and bio</li>
-                        <li>Location and join date</li>
-                        <li>Profile pictures</li>
-                        <li>Additional metadata</li>
-                    </ul>
-                </div>
-                
-                <label>Profile URLs to enrich:</label>
-                <textarea placeholder="https://www.facebook.com/123456789"></textarea>
-                <button class="btn" style="margin-top: 1rem;">🚀 Start Enrichment</button>
+            <div class="retry-section">
+                <button onclick="checkStreamlit()">🔄 Check Again</button>
+                <p>Already started Streamlit? Click to reconnect.</p>
             </div>
-        </div>
 
-        <!-- Page: Database -->
-        <div id="page-database" class="page-content hidden">
-            <div class="card disabled-overlay">
-                <div class="disabled-message">
-                    🐳 Requires Docker<br>
-                    <small>Install Docker to enable database features</small>
+            <div class="features">
+                <div class="feature">
+                    <h4>🔗 URL Transform</h4>
+                    <p>Convert marketplace URLs to clean profile links</p>
                 </div>
-                <h2 class="section-title">🗄️ Database</h2>
-                <div class="info-box">
-                    <strong>Database Storage:</strong> Persistently store enriched profiles in SQLite database with full CRUD operations.
+                <div class="feature">
+                    <h4>🦊 Firefox Enrichment</h4>
+                    <p>Extract names, photos, bios using your FB login</p>
                 </div>
-                
-                <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
-                    <input type="text" placeholder="Search profiles..." style="flex: 1;">
-                    <button class="btn">🔍 Search</button>
-                    <button class="btn btn-secondary">➕ Add Profile</button>
+                <div class="feature">
+                    <h4>💾 SQLite Database</h4>
+                    <p>Persistent storage with full CRUD operations</p>
                 </div>
-                
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Profile URL</th>
-                                <th>Name</th>
-                                <th>Location</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                                    No profiles in database. Install Docker to enable database features.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="feature">
+                    <h4>📥 Export</h4>
+                    <p>JSON, CSV, ZIP with profile images</p>
                 </div>
-            </div>
-        </div>
-
-        <!-- Page: Analytics -->
-        <div id="page-analytics" class="page-content hidden">
-            <div class="card">
-                <h2 class="section-title">📊 Analytics Dashboard</h2>
-                <div class="info-box">
-                    <strong>Browser-based Analytics:</strong> View statistics from your processed URLs.
+                <div class="feature">
+                    <h4>📈 Analytics</h4>
+                    <p>Track processing stats and history</p>
                 </div>
-                
-                <div class="stats">
-                    <div class="stat-card">
-                        <div class="stat-value" id="analyticsTotal">0</div>
-                        <div>Total Processed</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="analyticsSuccess">0</div>
-                        <div>Successful</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="analyticsRate">0%</div>
-                        <div>Success Rate</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="analyticsSessions">0</div>
-                        <div>Sessions</div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3 style="margin-bottom: 1rem;">📈 Processing History</h3>
-                    <div id="analyticsHistory"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Page: Export -->
-        <div id="page-export" class="page-content hidden">
-            <div class="card">
-                <h2 class="section-title">💾 Export Data</h2>
-                <div class="info-box">
-                    <strong>Export Formats:</strong> Download your processed data in various formats.
-                </div>
-                
-                <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 1rem;">
-                    <div class="card" style="border: 2px solid var(--border-color);">
-                        <h3 style="margin-bottom: 0.5rem;">📊 CSV Export</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Compatible with Excel, Google Sheets</p>
-                        <button class="btn" onclick="exportCSV()">Download CSV</button>
-                    </div>
-                    
-                    <div class="card" style="border: 2px solid var(--border-color);">
-                        <h3 style="margin-bottom: 0.5rem;">💾 JSON Export</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Machine-readable format</p>
-                        <button class="btn" onclick="exportJSON()">Download JSON</button>
-                    </div>
-                    
-                    <div class="card disabled-overlay" style="border: 2px solid var(--border-color);">
-                        <div class="disabled-message" style="font-size: 0.9rem;">🐳 Docker</div>
-                        <h3 style="margin-bottom: 0.5rem;">📑 Excel Export</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Full .xlsx with formatting</p>
-                        <button class="btn">Download Excel</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Page: Settings -->
-        <div id="page-settings" class="page-content hidden">
-            <div class="card">
-                <h2 class="section-title">⚙️ Settings</h2>
-                
-                <div style="margin-bottom: 2rem;">
-                    <h3 style="margin-bottom: 1rem;">🎨 Appearance</h3>
-                    <label style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                        <span style="flex: 1;">Dark Mode</span>
-                        <button class="btn btn-secondary" onclick="toggleTheme()">Toggle Theme</button>
-                    </label>
-                </div>
-                
-                <div style="margin-bottom: 2rem;">
-                    <h3 style="margin-bottom: 1rem;">💾 Data Management</h3>
-                    <button class="btn btn-secondary" onclick="clearAllData()">🗑️ Clear All Data</button>
-                    <p style="color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.9rem;">
-                        Remove all locally stored data (processed URLs, history)
-                    </p>
-                </div>
-                
-                <div>
-                    <h3 style="margin-bottom: 1rem;">ℹ️ About</h3>
-                    <p style="color: var(--text-secondary);">
-                        FB Profile Processor v2.0<br>
-                        Transform and process Facebook Marketplace profile URLs<br>
-                        <br>
-                        <strong>Browser Features:</strong> URL transformation, localStorage, CSV/JSON export<br>
-                        <strong>Docker Features:</strong> Profile enrichment, database, Excel export
-                    </p>
+                <div class="feature">
+                    <h4>🔌 API Ready</h4>
+                    <p>Future Graph API support built-in</p>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        let processedResults = [];
-        let currentPage = 'transform';
+        const STREAMLIT_URL = 'http://localhost:8501';
+        const HEALTH_ENDPOINT = STREAMLIT_URL + '/_stcore/health';
 
-        // Page Navigation
-        function showPage(page) {
-            // Hide all pages
-            document.querySelectorAll('.page-content').forEach(p => p.classList.add('hidden'));
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            
-            // Show selected page
-            document.getElementById(`page-${page}`).classList.remove('hidden');
-            event.target.closest('.nav-item').classList.add('active');
-            
-            // Update title
-            const titles = {
-                'transform': 'URL Transform',
-                'enrich': 'Profile Enrichment',
-                'database': 'Database',
-                'analytics': 'Analytics',
-                'export': 'Export Data',
-                'settings': 'Settings'
+        function copyToClipboard(btn, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const original = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => btn.textContent = original, 2000);
+            });
+        }
+
+        function showStreamlit() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('fallback').style.display = 'none';
+            const frame = document.getElementById('streamlit-frame');
+            frame.src = STREAMLIT_URL;
+            frame.style.display = 'block';
+        }
+
+        function showFallback() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('streamlit-frame').style.display = 'none';
+            document.getElementById('fallback').style.display = 'block';
+        }
+
+        function checkStreamlit() {
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('fallback').style.display = 'none';
+
+            // Try multiple methods to detect Streamlit
+            const timeout = 3000;
+
+            // Method 1: Fetch with timeout (may fail due to CORS)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            fetch(HEALTH_ENDPOINT, {
+                method: 'GET',
+                mode: 'no-cors', // Allows request but won't read response
+                signal: controller.signal
+            })
+            .then(() => {
+                clearTimeout(timeoutId);
+                // no-cors means we can't read response, but if it didn't throw, server might be up
+                // Try loading in iframe to confirm
+                testWithIframe();
+            })
+            .catch(() => {
+                clearTimeout(timeoutId);
+                showFallback();
+            });
+        }
+
+        function testWithIframe() {
+            // Create a hidden iframe to test if Streamlit loads
+            const testFrame = document.createElement('iframe');
+            testFrame.style.display = 'none';
+            testFrame.src = STREAMLIT_URL;
+            document.body.appendChild(testFrame);
+
+            let loaded = false;
+
+            testFrame.onload = () => {
+                loaded = true;
+                document.body.removeChild(testFrame);
+                showStreamlit();
             };
-            document.getElementById('pageTitle').textContent = titles[page];
-            currentPage = page;
-            
-            // Update analytics if on analytics page
-            if (page === 'analytics') {
-                updateAnalytics();
-            }
-        }
 
-        // Theme Management
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            document.querySelector('.theme-toggle').textContent = newTheme === 'dark' ? '☀️' : '🌙';
-        }
-
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        if (savedTheme === 'dark') document.querySelector('.theme-toggle').textContent = '☀️';
-
-        // Banner
-        function copyInstallScript() {
-            const script = 'curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash';
-            navigator.clipboard.writeText(script).then(() => {
-                event.target.textContent = '✅ Copied!';
-                setTimeout(() => event.target.textContent = '📋 Copy', 2000);
-            });
-        }
-
-        function closeBanner() {
-            document.getElementById('dockerBanner').classList.add('hidden');
-            localStorage.setItem('dockerBannerClosed', 'true');
-        }
-
-        if (localStorage.getItem('dockerBannerClosed') === 'true') {
-            document.getElementById('dockerBanner').classList.add('hidden');
-        }
-
-        // Storage
-        function saveToStorage(profiles) {
-            const data = {
-                profiles: profiles,
-                timestamp: new Date().toISOString(),
-                count: profiles.length
+            testFrame.onerror = () => {
+                document.body.removeChild(testFrame);
+                showFallback();
             };
-            localStorage.setItem('fb_profiles_current', JSON.stringify(data));
-            
-            const history = getHistory();
-            history.unshift(data);
-            if (history.length > 10) history.pop();
-            localStorage.setItem('fb_profiles_history', JSON.stringify(history));
+
+            // Timeout fallback
+            setTimeout(() => {
+                if (!loaded) {
+                    try { document.body.removeChild(testFrame); } catch(e) {}
+                    // If we got here without error, Streamlit is probably running
+                    showStreamlit();
+                }
+            }, 2000);
         }
 
-        function loadFromStorage() {
-            const data = localStorage.getItem('fb_profiles_current');
-            return data ? JSON.parse(data).profiles : [];
-        }
+        // Check on page load
+        checkStreamlit();
 
-        function getHistory() {
-            const data = localStorage.setItem('fb_profiles_history');
-            return data ? JSON.parse(data) : [];
-        }
-
-        // File Import
-        function importFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = e => document.getElementById('urlInput').value = e.target.result;
-            reader.readAsText(file);
-        }
-
-        // URL Processing
-        function transformURL(url) {
-            const match = url.match(/marketplace\/profile\/(\d+)/);
-            if (match) {
-                return {
-                    clean: `https://www.facebook.com/${match[1]}`,
-                    id: match[1],
-                    valid: true
-                };
+        // Periodically check if user is on fallback page
+        setInterval(() => {
+            if (document.getElementById('fallback').style.display === 'block') {
+                // Silent check - don't show loading
+                fetch(HEALTH_ENDPOINT, { method: 'GET', mode: 'no-cors' })
+                    .then(() => {
+                        // Might be up, update status indicator
+                        const indicator = document.getElementById('statusIndicator');
+                        indicator.className = 'status online';
+                        indicator.innerHTML = `
+                            <div class="dot online"></div>
+                            <div>
+                                <strong>Streamlit Server Detected!</strong>
+                                <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Click "Check Again" to connect</p>
+                            </div>
+                        `;
+                    })
+                    .catch(() => {});
             }
-            return { clean: null, id: null, valid: false };
-        }
-
-        function processURLs() {
-            const input = document.getElementById('urlInput').value;
-            const urls = input.split('\n').map(u => u.trim()).filter(u => u.length > 0);
-
-            if (urls.length === 0) {
-                alert('Please enter at least one URL');
-                return;
-            }
-
-            processedResults = [];
-            let successCount = 0;
-
-            urls.forEach((url, index) => {
-                const result = transformURL(url);
-                const item = {
-                    id: index + 1,
-                    original_url: url,
-                    clean_url: result.clean,
-                    profile_id: result.id,
-                    valid: result.valid,
-                    timestamp: new Date().toISOString()
-                };
-
-                processedResults.push(item);
-                if (result.valid) successCount++;
-            });
-
-            const successRate = ((successCount / urls.length) * 100).toFixed(1);
-
-            document.getElementById('totalCount').textContent = urls.length;
-            document.getElementById('successCount').textContent = successCount;
-            document.getElementById('successRate').textContent = successRate + '%';
-            
-            saveToStorage(processedResults);
-            displayResults();
-            document.getElementById('transformResults').style.display = 'block';
-        }
-
-        function displayResults() {
-            const table = document.getElementById('resultsTable');
-            table.innerHTML = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Original URL</th>
-                            <th>Transformed URL</th>
-                            <th>Profile ID</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${processedResults.map(item => `
-                            <tr>
-                                <td>${item.id}</td>
-                                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${item.original_url}</td>
-                                <td>${item.valid ? item.clean_url : '-'}</td>
-                                <td>${item.profile_id || '-'}</td>
-                                <td>${item.valid ? '✅ Valid' : '❌ Invalid'}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
-        }
-
-        // Export Functions
-        function exportJSON() {
-            if (processedResults.length === 0) {
-                alert('No data to export');
-                return;
-            }
-            const dataStr = JSON.stringify(processedResults, null, 2);
-            downloadFile(dataStr, `fb_profiles_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
-        }
-
-        function exportCSV() {
-            if (processedResults.length === 0) {
-                alert('No data to export');
-                return;
-            }
-            const headers = ['ID', 'Original URL', 'Transformed URL', 'Profile ID', 'Valid', 'Timestamp'];
-            const rows = processedResults.map(p => [
-                p.id,
-                `"${p.original_url}"`,
-                `"${p.clean_url || ''}"`,
-                p.profile_id || '',
-                p.valid ? 'Yes' : 'No',
-                p.timestamp
-            ]);
-            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-            downloadFile(csv, `fb_profiles_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
-        }
-
-        function copyAllURLs() {
-            if (processedResults.length === 0) {
-                alert('No data to copy');
-                return;
-            }
-            const urls = processedResults.filter(p => p.valid).map(p => p.clean_url).join('\n');
-            navigator.clipboard.writeText(urls).then(() => {
-                alert(`Copied ${processedResults.filter(p => p.valid).length} URLs to clipboard!`);
-            });
-        }
-
-        function downloadFile(content, filename, type) {
-            const blob = new Blob([content], { type: type });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            link.click();
-            URL.revokeObjectURL(url);
-        }
-
-        // Analytics
-        function updateAnalytics() {
-            const history = getHistory();
-            const allProfiles = history.flatMap(h => h.profiles || []);
-            const successCount = allProfiles.filter(p => p.valid).length;
-            const totalCount = allProfiles.length;
-            const successRate = totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) : 0;
-
-            document.getElementById('analyticsTotal').textContent = totalCount;
-            document.getElementById('analyticsSuccess').textContent = successCount;
-            document.getElementById('analyticsRate').textContent = successRate + '%';
-            document.getElementById('analyticsSessions').textContent = history.length;
-
-            const historyDiv = document.getElementById('analyticsHistory');
-            if (history.length === 0) {
-                historyDiv.innerHTML = '<p style="color: var(--text-secondary); padding: 2rem; text-align: center;">No processing history yet.</p>';
-            } else {
-                historyDiv.innerHTML = history.map((item, index) => `
-                    <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
-                        <strong>${new Date(item.timestamp).toLocaleString()}</strong><br>
-                        <span style="color: var(--text-secondary);">${item.count} profiles processed</span>
-                    </div>
-                `).join('');
-            }
-        }
-
-        // Settings
-        function clearAllData() {
-            if (confirm('Clear all locally stored data? This cannot be undone.')) {
-                localStorage.removeItem('fb_profiles_current');
-                localStorage.removeItem('fb_profiles_history');
-                processedResults = [];
-                document.getElementById('transformResults').style.display = 'none';
-                alert('All data cleared!');
-            }
-        }
-
-        // Load saved data on page load
-        window.addEventListener('load', () => {
-            const saved = loadFromStorage();
-            if (saved.length > 0) {
-                processedResults = saved;
-                displayResults();
-                
-                const successCount = saved.filter(p => p.valid).length;
-                const successRate = ((successCount / saved.length) * 100).toFixed(1);
-                
-                document.getElementById('totalCount').textContent = saved.length;
-                document.getElementById('successCount').textContent = successCount;
-                document.getElementById('successRate').textContent = successRate + '%';
-                document.getElementById('transformResults').style.display = 'block';
-            }
-        });
+        }, 5000);
     </script>
 </body>
 </html>
