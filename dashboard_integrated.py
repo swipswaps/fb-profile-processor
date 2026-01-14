@@ -11,7 +11,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import fb_profile_processor as processor
-import browser_enricher
+import selenium_enricher  # Firefox-based enricher (works with existing profile)
+import marketplace_scraper  # Marketplace items scraper
 from pathlib import Path
 from datetime import datetime
 import io
@@ -19,6 +20,15 @@ import zipfile
 import requests
 from PIL import Image
 import logging
+import time
+
+# Future-proofing: Provider pattern for API support
+try:
+    from provider_manager import ProviderManager
+    from data_providers import FacebookConfig, DataSource
+    PROVIDER_SUPPORT = True
+except ImportError:
+    PROVIDER_SUPPORT = False
 
 
 # ======================
@@ -38,6 +48,86 @@ def detect_schema_version(db_path):
     except Exception as e:
         logging.error(f"Schema detection failed: {e}")
         return 'unknown'
+
+
+def check_api_schema_version(db_path: str) -> int:
+    """
+    Check database API schema version (from schema_version table).
+
+    Returns:
+        0 = Legacy (no schema_version table or no API support tables)
+        1-5 = Schema version with API support
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Check if schema_version table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+        if not cursor.fetchone():
+            conn.close()
+            return 0  # Legacy - no version tracking
+
+        # Get max version
+        cursor.execute("SELECT MAX(version) FROM schema_version")
+        result = cursor.fetchone()
+        conn.close()
+
+        return result[0] if result and result[0] else 0
+    except Exception as e:
+        logging.error(f"API schema version check failed: {e}")
+        return 0
+
+
+def is_api_ready(db_path: str) -> bool:
+    """Check if database supports API features (schema v5+)"""
+    return check_api_schema_version(db_path) >= 5
+
+
+def get_database_with_schema_info(db_path: str) -> str:
+    """Get database display name with schema info"""
+    if not Path(db_path).exists():
+        return f"📄 {db_path} (new)"
+
+    api_version = check_api_schema_version(db_path)
+    base_schema = detect_schema_version(db_path)
+
+    if api_version >= 5:
+        return f"📊 {db_path} (v{api_version} - API Ready)"
+    elif api_version > 0:
+        return f"🔧 {db_path} (v{api_version} - Partial)"
+    elif base_schema == 'new':
+        return f"🔧 {db_path} (needs API migration)"
+    else:
+        return f"⚠️ {db_path} (legacy)"
+
+
+def run_api_migration(db_path: str) -> tuple:
+    """
+    Run API support migration on database.
+
+    Returns:
+        (success: bool, message: str)
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['python3', 'migrate_for_api_support.py', '--database', db_path],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if result.returncode == 0:
+            return True, result.stdout
+        else:
+            return False, result.stderr or "Migration failed"
+    except subprocess.TimeoutExpired:
+        return False, "Migration timed out"
+    except FileNotFoundError:
+        return False, "migrate_for_api_support.py not found"
+    except Exception as e:
+        return False, str(e)
 
 
 def get_display_columns(schema_version):
@@ -86,19 +176,29 @@ if 'last_processed' not in st.session_state:
     st.session_state.last_processed = None
 if 'selected_db' not in st.session_state:
     st.session_state.selected_db = 'facebook_profiles.db'
-if 'chrome_connected' not in st.session_state:
-    st.session_state.chrome_connected = None
+if 'firefox_ready' not in st.session_state:
+    st.session_state.firefox_ready = None
+if 'fb_logged_in_user' not in st.session_state:
+    st.session_state.fb_logged_in_user = None
+if 'marketplace_items' not in st.session_state:
+    st.session_state.marketplace_items = []
 
-
-def check_chrome_connection():
-    """Check if Chrome is running with remote debugging"""
+# Check Firefox readiness EARLY (before sidebar renders)
+if st.session_state.firefox_ready is None:
     try:
-        from playwright.sync_api import sync_playwright
-        p = sync_playwright().start()
-        browser = p.chromium.connect_over_cdp('http://localhost:9222')
-        browser.close()
-        p.stop()
-        return True
+        profile_path = selenium_enricher.get_firefox_profile_path()
+        st.session_state.firefox_ready = profile_path is not None
+    except:
+        st.session_state.firefox_ready = False
+
+
+def check_firefox_ready():
+    """Check if Firefox profile exists and Selenium can use it"""
+    try:
+        profile_path = selenium_enricher.get_firefox_profile_path()
+        if profile_path:
+            return True
+        return False
     except Exception as e:
         return False
 
@@ -127,12 +227,20 @@ def download_profile_image(profile_id, image_url, images_dir='profile_images'):
 def load_data(db_path):
     """Load data from SQLite database with caching"""
     try:
+        if not Path(db_path).exists():
+            return pd.DataFrame()
         conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+        # Check if profiles table exists
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='profiles'")
+        if not cursor.fetchone():
+            conn.close()
+            return pd.DataFrame()
         df = pd.read_sql_query("SELECT * FROM profiles ORDER BY id DESC", conn)
         conn.close()
         return df
     except Exception as e:
-        st.error(f"Error loading database: {e}")
+        logging.warning(f"Could not load database {db_path}: {e}")
         return pd.DataFrame()
 
 
@@ -213,27 +321,48 @@ def process_urls_ui(urls, db_file, rate_limit=1.0, timeout=15):
 
 
 def enrich_with_browser_ui(db_file, rate_limit=3.0):
-    """Enrich pending profiles with browser (Stage 2)"""
+    """Enrich pending profiles with Firefox browser (Stage 2)"""
     st.session_state.processing = True
 
     progress_bar = st.progress(0)
     status_text = st.empty()
     results_container = st.container()
+    driver = None
+    temp_profile_dir = None
 
     try:
-        # Connect to Chrome
-        status_text.text("Connecting to Chrome...")
-        playwright, browser, page = browser_enricher.connect_to_chrome()
+        # Create Firefox driver with existing profile
+        status_text.text("Starting Firefox with your profile (includes FB login)...")
+        driver, temp_profile_dir = selenium_enricher.create_firefox_driver()
 
-        # Get pending profiles
+        if not driver:
+            st.error("Failed to create Firefox driver")
+            st.session_state.processing = False
+            return
+
+        # Get pending profiles (supports both old and new schema)
         conn = sqlite3.connect(db_file)
         cur = conn.cursor()
-        cur.execute("""
-            SELECT id, profile_id, clean_url
-            FROM profiles
-            WHERE enrichment_status = 'pending'
-            AND profile_id IS NOT NULL
-        """)
+
+        # Check which columns exist
+        cur.execute("PRAGMA table_info(profiles)")
+        columns = {row[1] for row in cur.fetchall()}
+
+        # Use fb_id (new schema) or profile_id (old schema)
+        if 'fb_id' in columns:
+            cur.execute("""
+                SELECT id, fb_id, input_url
+                FROM profiles
+                WHERE fb_id IS NOT NULL
+                AND (enrichment_status IS NULL OR enrichment_status = 'pending' OR enrichment_status = 'partial')
+            """)
+        else:
+            cur.execute("""
+                SELECT id, profile_id, clean_url
+                FROM profiles
+                WHERE enrichment_status = 'pending'
+                AND profile_id IS NOT NULL
+            """)
         pending = cur.fetchall()
         conn.close()
 
@@ -247,31 +376,30 @@ def enrich_with_browser_ui(db_file, rate_limit=3.0):
         error_count = 0
 
         # Process each profile
-        for i, (db_id, profile_id, clean_url) in enumerate(pending, 1):
+        for i, (db_id, fb_id, input_url) in enumerate(pending, 1):
             progress_bar.progress(i / total)
-            status_text.text(f"Enriching {i}/{total}: {profile_id}...")
+            status_text.text(f"Enriching {i}/{total}: {fb_id}...")
 
             try:
-                # Enrich profile
-                enrichment_data = browser_enricher.enrich_profile(page, profile_id)
+                # Enrich profile using Selenium (pass db_id as profile_id, fb_id for URL)
+                enrichment_data = selenium_enricher.enrich_profile(driver, db_id, fb_id)
 
                 # Download profile image if available
                 local_image_path = None
-                if enrichment_data.get('browser_profile_pic_url'):
-                    local_image_path = download_profile_image(
-                        profile_id,
-                        enrichment_data['browser_profile_pic_url']
-                    )
+                pic_url = enrichment_data.get('fb_picture_url') or enrichment_data.get('browser_profile_pic_url')
+                if pic_url:
+                    local_image_path = download_profile_image(fb_id, pic_url)
                     if local_image_path:
                         enrichment_data['local_image_path'] = local_image_path
 
                 # Update database
                 conn = sqlite3.connect(db_file)
-                browser_enricher.update_profile(conn, db_id, enrichment_data)
+                selenium_enricher.update_profile_in_db(conn, db_id, enrichment_data)
                 conn.close()
 
+                username = enrichment_data.get('fb_username') or enrichment_data.get('browser_resolved_username', 'N/A')
                 with results_container:
-                    st.success(f"✓ {profile_id} - {enrichment_data.get('browser_resolved_username', 'N/A')}")
+                    st.success(f"✓ {fb_id} - {username}")
 
                 success_count += 1
 
@@ -282,33 +410,38 @@ def enrich_with_browser_ui(db_file, rate_limit=3.0):
 
             # Rate limiting
             if i < total:
-                import time
                 time.sleep(rate_limit)
-
-        # Cleanup
-        page.close()
-        browser.close()
-        playwright.stop()
 
         # Summary
         st.success(f"""
-        **Browser Enrichment Complete!**
+        **Firefox Enrichment Complete!**
         - Total: {total}
         - Success: {success_count}
         - Errors: {error_count}
         """)
 
     except Exception as e:
-        st.error(f"Browser enrichment failed: {e}")
+        st.error(f"Firefox enrichment failed: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         st.info("""
-        **To enable browser enrichment:**
-        1. Close all Chrome windows
-        2. Run: `google-chrome --remote-debugging-port=9222`
-        3. Log into Facebook in that Chrome window
-        4. Refresh this dashboard
+        **To enable Firefox enrichment:**
+        1. Log into Facebook in your regular Firefox browser
+        2. Refresh this dashboard
+
+        The enricher uses your existing Firefox profile with cookies.
+        No special setup required!
         """)
 
     finally:
+        # Cleanup
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+        if temp_profile_dir:
+            selenium_enricher.cleanup_temp_profile()
         st.session_state.processing = False
         load_data.clear()
 
@@ -335,36 +468,71 @@ def main():
     
     # Sidebar - Database selection
     st.sidebar.header("⚙️ Database")
-    
+
     db_files = list(Path('.').glob('*.db'))
     db_options = [str(f) for f in db_files] if db_files else []
-    
+
     # Add option to create new database
     db_options.insert(0, "facebook_profiles.db")
     db_options = list(set(db_options))  # Remove duplicates
-    
+
+    # Create display labels with schema info
+    db_labels = {db: get_database_with_schema_info(db) for db in db_options}
+
     selected_db = st.sidebar.selectbox(
         "Select Database",
         db_options,
-        index=0
+        index=0,
+        format_func=lambda x: db_labels.get(x, x)
     )
 
-    # Detect and display schema version
+    # Detect and display schema version with API status
     if Path(selected_db).exists():
         schema_version = detect_schema_version(selected_db)
+        api_version = check_api_schema_version(selected_db)
+        api_ready = is_api_ready(selected_db)
+
+        # Store in session state for use elsewhere
+        st.session_state.api_schema_version = api_version
+        st.session_state.api_ready = api_ready
+
         if schema_version == 'new':
-            st.sidebar.success("✅ Facebook API Schema (v24.0)")
+            if api_ready:
+                st.sidebar.success(f"✅ API Ready (v{api_version})")
+            else:
+                st.sidebar.info("📋 FB Schema OK")
+                # Show migration option
+                with st.sidebar.expander("🔄 Enable API Features"):
+                    st.write("""
+                    **Current:** Basic Facebook schema
+
+                    **Upgrade to:** API-ready schema with:
+                    - Provider switching
+                    - Rate limit tracking
+                    - API credential storage
+                    """)
+                    if st.button("🚀 Upgrade Schema", key="sidebar_migrate"):
+                        with st.spinner("Running migration..."):
+                            success, msg = run_api_migration(selected_db)
+                            if success:
+                                st.success("✅ Migration complete!")
+                                st.rerun()
+                            else:
+                                st.error(f"Migration failed: {msg}")
         elif schema_version == 'old':
-            st.sidebar.warning("⚠️ Legacy Schema Detected")
+            st.sidebar.warning("⚠️ Legacy Schema")
             with st.sidebar.expander("ℹ️ About Schema Versions"):
-                st.write("""
-                **Legacy Schema**: Original column names (profile_id, page_title, etc.)
+                st.write(f"""
+                **Legacy Schema**: Original column names
 
-                **Facebook API Schema**: Graph API v24.0 compatible (fb_id, fb_name, etc.)
-
-                Both schemas are fully supported. You can migrate to the new schema using:
+                **To upgrade column names:**
                 ```bash
                 python3 schema_upgrade_v2.py --database {selected_db}
+                ```
+
+                **To add API support:**
+                ```bash
+                python3 migrate_for_api_support.py --database {selected_db}
                 ```
                 """)
         else:
@@ -392,10 +560,10 @@ def main():
     if pending_count > 0:
         st.sidebar.markdown("---")
         st.sidebar.markdown("### ⚡ Quick Actions")
-        st.sidebar.warning(f"**{pending_count} profiles** need browser enrichment to get images & full data")
+        st.sidebar.warning(f"**{pending_count} profiles** need Firefox enrichment to get images & full data")
 
-        # Check Chrome status for quick action button
-        if st.session_state.chrome_connected:
+        # Check Firefox status for quick action button
+        if st.session_state.firefox_ready:
             if st.sidebar.button(
                 f"🚀 Enrich All {pending_count} Pending",
                 use_container_width=True,
@@ -408,27 +576,173 @@ def main():
                 f"🚀 Enrich All {pending_count} Pending",
                 use_container_width=True,
                 disabled=True,
-                help="Start Chrome with: google-chrome --remote-debugging-port=9222"
+                help="Log into Facebook in Firefox first"
             )
-            with st.sidebar.expander("🔧 How to Enable"):
-                st.markdown("""
-                1. **Close all Chrome windows**
-                2. **Run in terminal:**
-                   ```bash
-                   google-chrome --remote-debugging-port=9222
-                   ```
-                3. **Log into Facebook** in that Chrome
-                4. **Refresh this page**
-                """)
+            st.sidebar.info("💡 Log into Facebook in Firefox to enable enrichment")
+
+    # ========== MARKETPLACE SECTION ==========
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🛒 My Marketplace")
+
+    # Load cached user data from database (for name/details)
+    # But Firefox ready status is the source of truth for LOGIN state
+    db_user = None
+    try:
+        if Path("marketplace.db").exists():
+            conn = sqlite3.connect("marketplace.db")
+            cur = conn.cursor()
+            cur.execute("SELECT fb_id, fb_name, fb_username, profile_picture_url FROM logged_in_user WHERE id=1")
+            row = cur.fetchone()
+            conn.close()
+            if row and (row[0] or row[1] or row[2]):  # Has ID, name, or username
+                db_user = {
+                    'fb_id': row[0],
+                    'fb_name': row[1],
+                    'fb_username': row[2],
+                    'profile_picture_url': row[3]
+                }
+                # Update session state with DB data if we have it
+                if st.session_state.fb_logged_in_user is None:
+                    st.session_state.fb_logged_in_user = db_user
+
+                # Also load cached items if not already loaded
+                if not st.session_state.marketplace_items:
+                    conn = sqlite3.connect("marketplace.db")
+                    items_df = pd.read_sql("SELECT * FROM marketplace_items", conn)
+                    conn.close()
+                    st.session_state.marketplace_items = items_df.to_dict('records') if not items_df.empty else []
+    except Exception:
+        pass  # No cached data available
+
+    # Firefox ready = user IS logged in to Facebook
+    if st.session_state.firefox_ready:
+        # Use session state user if available, otherwise use db_user, otherwise show as logged in
+        user = st.session_state.fb_logged_in_user or db_user
+
+        # Firefox ready = user IS logged in to Facebook
+        # Show user info if we have it, otherwise show as "Logged In"
+        if user:
+            user_name = user.get('fb_name') or user.get('fb_username') or 'Facebook User'
+        else:
+            user_name = "Logged In"  # We know they're logged in (Firefox ready), just don't have name yet
+
+        st.sidebar.success(f"👤 **{user_name}**")
+
+        # Show items count
+        item_count = len(st.session_state.marketplace_items)
+        st.sidebar.metric("Listings", item_count, help="Number of items you're selling on Facebook Marketplace")
+
+        # Scan button - always available when Firefox ready
+        if st.sidebar.button(
+            f"🔄 Scan My Listings",
+            use_container_width=True,
+            type="primary",
+            help="Scan Facebook Marketplace for your selling items. Opens Firefox briefly.",
+            key="sidebar_scan_listings"
+        ):
+            st.session_state.run_marketplace_scan = True
+            st.rerun()
+
+        st.sidebar.caption("👆 Click to scan, then see 🛒 Marketplace tab")
+    else:
+        st.sidebar.warning("🦊 Open Firefox & log into Facebook")
+        st.sidebar.caption("Then refresh this page")
+
+    # ========== PROVIDER STATUS (Future-proofing for API) ==========
+    if PROVIDER_SUPPORT:
+        st.sidebar.markdown("---")
+        api_ready = st.session_state.get('api_ready', False)
+        api_version = st.session_state.get('api_schema_version', 0)
+
+        with st.sidebar.expander("🔌 Data Provider", expanded=False):
+            if not api_ready:
+                st.warning(f"⚠️ Limited Mode (Schema v{api_version})")
+                st.caption("API features require schema upgrade")
+                st.markdown("Go to **⚙️ Settings** tab to upgrade")
+            else:
+                try:
+                    config = FacebookConfig.from_env()
+                    provider_icons = {'scraper': '🌐', 'api': '📡', 'hybrid': '🔀'}
+                    icon = provider_icons.get(config.provider_type, '❓')
+                    st.success(f"{icon} **{config.provider_type.upper()}** Mode")
+                    st.markdown(f"**Browser:** `{config.browser_type}`")
+
+                    if config.has_api_credentials():
+                        st.success("✅ API credentials configured")
+                    else:
+                        st.info("ℹ️ Using browser scraper (no API)")
+
+                    st.markdown("""
+                    ---
+                    **Available Modes:**
+                    - 🌐 Scraper (browser-based)
+                    - 📡 API (Graph API)
+                    - 🔀 Hybrid (API + fallback)
+                    """)
+                except Exception as e:
+                    st.warning(f"Provider info unavailable: {e}")
 
     # Main tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📤 Upload & Process",
         "📊 View Data",
         "✏️ Edit Records",
         "📈 Analytics",
-        "💾 Export"
+        "💾 Export",
+        "⚙️ Settings",
+        "🛒 Marketplace"
     ])
+
+    # ========== MARKETPLACE AUTO-ACTIONS ==========
+    # Handle FB detection flag
+    if st.session_state.get('run_fb_detection'):
+        st.session_state.run_fb_detection = False
+        try:
+            with st.spinner("Detecting Facebook login..."):
+                is_logged_in, user_info = marketplace_scraper.check_facebook_login_status()
+                if is_logged_in and user_info:
+                    st.session_state.fb_logged_in_user = user_info
+                    st.toast(f"✅ Logged in as: {user_info.get('fb_name', 'Facebook User')}")
+                else:
+                    st.toast("⚠️ Not logged into Facebook", icon="⚠️")
+        except Exception as e:
+            st.toast(f"Detection error: {e}", icon="❌")
+        st.rerun()
+
+    # Handle marketplace scan flag
+    if st.session_state.get('run_marketplace_scan'):
+        st.session_state.run_marketplace_scan = False
+        try:
+            with st.spinner("Scanning your marketplace listings..."):
+                user_info, items = marketplace_scraper.scrape_my_listings(
+                    db_path="marketplace.db",
+                    limit=50
+                )
+                if user_info:
+                    # Only update session if scan returned valid data
+                    # Don't overwrite good data with "Facebook User" default
+                    current_user = st.session_state.fb_logged_in_user
+                    new_name = user_info.get('fb_name', '')
+
+                    if new_name and new_name != 'Facebook User':
+                        # Scan got a real name - use it
+                        st.session_state.fb_logged_in_user = user_info
+                    elif current_user and current_user.get('fb_name') and current_user.get('fb_name') != 'Facebook User':
+                        # Keep existing good name, but update items
+                        pass  # Don't overwrite user info
+                    else:
+                        # No good data anywhere - use what we got
+                        st.session_state.fb_logged_in_user = user_info
+
+                    st.session_state.marketplace_items = items
+                    st.toast(f"✅ Found {len(items)} listings", icon="📦")
+                else:
+                    # Scan failed - DON'T clear existing login, just show error
+                    st.toast("Could not access Facebook", icon="❌")
+        except Exception as e:
+            # Error - DON'T clear existing login
+            st.toast(f"Scan error: {e}", icon="❌")
+        st.rerun()
 
     # ========== PENDING PROFILES BANNER (UX Improvement) ==========
     pending_count = stats.get('pending_enrichment', 0)
@@ -455,20 +769,20 @@ def main():
     with tab1:
         st.header("Upload & Process Facebook Profile URLs")
 
-        # Check Chrome connection
-        if st.session_state.chrome_connected is None:
-            st.session_state.chrome_connected = check_chrome_connection()
+        # Check Firefox readiness
+        if st.session_state.firefox_ready is None:
+            st.session_state.firefox_ready = check_firefox_ready()
 
-        # Chrome status indicator
+        # Firefox status indicator
         col_status1, col_status2 = st.columns([3, 1])
         with col_status1:
-            if st.session_state.chrome_connected:
-                st.success("✅ Chrome Connected - Full enrichment available")
+            if st.session_state.firefox_ready:
+                st.success("✅ Firefox Ready - Full enrichment available (uses your existing FB login)")
             else:
-                st.warning("⚠️ Chrome Not Connected - HTTP processing only")
+                st.warning("⚠️ Firefox profile not found - HTTP processing only")
         with col_status2:
-            if st.button("🔄 Recheck"):
-                st.session_state.chrome_connected = check_chrome_connection()
+            if st.button("🔄 Recheck", help="Check if Firefox profile is available for enrichment"):
+                st.session_state.firefox_ready = check_firefox_ready()
                 st.rerun()
 
         st.markdown("---")
@@ -580,7 +894,7 @@ def main():
                 disabled=button_disabled,
                 use_container_width=True,
                 type="primary",
-                help="Process URLs with HTTP requests (no browser needed)",
+                help="Process URLs using HTTP requests only (no browser required)",
                 key="http_process_button"
             ):
                 # DEBUG: Show what we're processing
@@ -605,31 +919,29 @@ def main():
                     st.code(traceback.format_exc())
 
         with col_browser:
-            st.markdown("**Stage 2: Browser Enrichment**")
-            st.caption("Slow • Full data • Requires Chrome + Facebook login")
+            st.markdown("**Stage 2: Firefox Enrichment**")
+            st.caption("Full data • Uses your existing Firefox profile (no special setup!)")
 
-            if not st.session_state.chrome_connected:
+            if not st.session_state.firefox_ready:
                 st.button(
-                    "⚡ Enrich with Browser",
+                    "⚡ Enrich with Firefox",
                     disabled=True,
                     use_container_width=True,
-                    help="Chrome not connected. See setup instructions below."
+                    help="Firefox profile not found. See setup instructions below."
                 )
 
-                with st.expander("🔧 Chrome Setup Instructions"):
+                with st.expander("🔧 Firefox Setup Instructions"):
                     st.markdown("""
-                    **To enable browser enrichment:**
+                    **To enable Firefox enrichment:**
 
-                    1. Close all Chrome windows
-                    2. Open terminal and run:
-                    ```bash
-                    google-chrome --remote-debugging-port=9222
-                    ```
-                    3. Log into Facebook in that Chrome window
-                    4. Click "🔄 Recheck" button above
-                    5. Return here and click "Enrich with Browser"
+                    1. Open Firefox (your regular browser)
+                    2. Log into Facebook at facebook.com
+                    3. Click "🔄 Recheck" button above
+                    4. Return here and click "Enrich with Firefox"
 
-                    **What browser enrichment provides:**
+                    ✅ **No special setup needed!** Uses your existing Firefox profile.
+
+                    **What Firefox enrichment provides:**
                     - Resolved usernames (e.g., `100000563858165` → `kristi.sutphin.9`)
                     - Real profile names
                     - Bio/description text
@@ -862,7 +1174,7 @@ def main():
             st.markdown("---")
             st.markdown("**Danger Zone:**")
 
-            if st.button("🗑️ Delete This Record", type="secondary"):
+            if st.button("🗑️ Delete This Record", type="secondary", help="Permanently delete this profile record from database"):
                 if processor.delete_profile(selected_db, record_id):
                     st.success("✅ Record deleted successfully!")
                     load_data.clear()
@@ -1093,6 +1405,399 @@ Image Sources:
                     file_name=f"fb_profiles_{timestamp}.zip",
                     mime="application/zip"
                 )
+
+    # ========== TAB 6: Settings ==========
+    with tab6:
+        st.header("⚙️ Settings & Configuration")
+
+        # Get API readiness status
+        api_ready = st.session_state.get('api_ready', False)
+        api_version = st.session_state.get('api_schema_version', 0)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("🔌 Data Provider Configuration")
+
+            # Check schema status first
+            if not api_ready:
+                st.warning(f"⚠️ Database Schema: v{api_version} (API features require v5+)")
+                st.markdown("""
+                **Current database needs migration to enable:**
+                - 🔀 Provider switching (scraper/API/hybrid)
+                - 📊 Rate limit tracking
+                - 🔑 API credential storage
+                - 📈 Usage analytics
+                """)
+
+                st.markdown("---")
+                if st.button("🚀 Upgrade Database Schema", type="primary", key="settings_migrate"):
+                    with st.spinner("Running migration..."):
+                        success, msg = run_api_migration(selected_db)
+                        if success:
+                            st.success("✅ Migration complete! Refreshing...")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Migration failed: {msg}")
+
+                st.markdown("---")
+                st.caption("Or run manually:")
+                st.code(f"python3 migrate_for_api_support.py --database {selected_db}", language="bash")
+
+            elif PROVIDER_SUPPORT:
+                try:
+                    config = FacebookConfig.from_env()
+
+                    # Provider status with visual feedback
+                    st.markdown("**Current Provider:**")
+                    provider_icons = {
+                        'scraper': '🌐',
+                        'api': '📡',
+                        'hybrid': '🔀'
+                    }
+                    st.success(f"{provider_icons.get(config.provider_type, '❓')} **{config.provider_type.upper()}** Mode Active")
+
+                    # Provider selector
+                    st.markdown("---")
+                    st.markdown("**Switch Provider:**")
+                    current_idx = ['scraper', 'api', 'hybrid'].index(config.provider_type) if config.provider_type in ['scraper', 'api', 'hybrid'] else 0
+
+                    provider_choice = st.radio(
+                        "Select data source:",
+                        options=['scraper', 'api', 'hybrid'],
+                        index=current_idx,
+                        format_func=lambda x: {
+                            'scraper': '🌐 Browser Scraper (No API needed)',
+                            'api': '📡 Facebook Graph API (Requires credentials)',
+                            'hybrid': '🔀 Hybrid (API + Scraper fallback)'
+                        }[x],
+                        key="provider_selector"
+                    )
+
+                    if provider_choice != config.provider_type:
+                        st.info(f"To switch to **{provider_choice}**, set: `export DATA_PROVIDER={provider_choice}`")
+
+                    # Current config display
+                    st.markdown("---")
+                    with st.expander("📋 Full Configuration"):
+                        st.json({
+                            "provider_type": config.provider_type,
+                            "browser_type": config.browser_type,
+                            "scraper_enabled": config.scraper_enabled,
+                            "cache_enabled": config.cache_enabled,
+                            "cache_ttl_seconds": config.cache_ttl,
+                            "max_requests_per_minute": config.max_requests_per_minute,
+                            "api_credentials_configured": config.has_api_credentials(),
+                        })
+
+                    # API Credentials section
+                    if provider_choice in ['api', 'hybrid']:
+                        st.markdown("---")
+                        st.markdown("**🔑 API Credentials:**")
+                        if config.has_api_credentials():
+                            st.success("✅ API credentials configured")
+                        else:
+                            st.warning("⚠️ No API credentials")
+                            st.code("""
+# Set these environment variables:
+export FACEBOOK_APP_ID=your_app_id
+export FACEBOOK_APP_SECRET=your_secret
+export FACEBOOK_ACCESS_TOKEN=your_token
+                            """, language="bash")
+
+                except Exception as e:
+                    st.error(f"Provider error: {e}")
+            else:
+                st.warning("Provider support not available")
+                st.info("Install data_providers.py and provider_manager.py for API support")
+
+        with col2:
+            st.subheader("🔑 Facebook API Access")
+
+            st.markdown("""
+            **Connect via Facebook Graph API for faster, more reliable access.**
+
+            When API is configured, the tool will use it instead of browser automation.
+            """)
+
+            # Load current token status
+            current_token = marketplace_scraper.get_access_token()
+            api = marketplace_scraper.get_facebook_api()
+
+            if api.api_available:
+                st.success("✅ Facebook API Connected")
+                config = marketplace_scraper.load_fb_config()
+                if config.get('fb_name'):
+                    st.info(f"👤 Connected as: **{config.get('fb_name')}**")
+            else:
+                st.warning("⚠️ API not configured - using browser scraping")
+
+            st.markdown("---")
+            st.markdown("**Configure Access Token:**")
+
+            with st.expander("📋 How to get a Facebook Access Token", expanded=not api.api_available):
+                st.markdown("""
+                1. Go to [Facebook Developer Portal](https://developers.facebook.com/)
+                2. Create or select your app
+                3. Go to **Tools** → **Graph API Explorer**
+                4. Select your app and get a **User Access Token**
+                5. For Marketplace access, you need these permissions:
+                   - `marketplace_management`
+                   - `pages_read_engagement`
+
+                **Note:** Marketplace API access is restricted. If you don't have
+                access, the tool will fall back to browser scraping.
+
+                For long-lived tokens, use the Access Token Debugger to extend.
+                """)
+
+            # Token input
+            new_token = st.text_input(
+                "Access Token",
+                value="",
+                type="password",
+                placeholder="Paste your Facebook access token here...",
+                help="Your Facebook Graph API access token"
+            )
+
+            col_test, col_save = st.columns(2)
+            with col_test:
+                if st.button("🧪 Test Token", disabled=not new_token, help="Verify the token is valid"):
+                    with st.spinner("Testing token..."):
+                        is_valid, result = marketplace_scraper.test_access_token(new_token)
+                        if is_valid:
+                            st.success(f"✅ Valid! Connected as: {result.get('fb_name')}")
+                        else:
+                            st.error(f"❌ Invalid: {result}")
+
+            with col_save:
+                if st.button("💾 Save Token", disabled=not new_token, type="primary", help="Save token to configuration"):
+                    with st.spinner("Saving..."):
+                        is_valid, result = marketplace_scraper.test_access_token(new_token)
+                        if is_valid:
+                            marketplace_scraper.set_access_token(new_token)
+                            # Also save user info
+                            config = marketplace_scraper.load_fb_config()
+                            config.update(result)
+                            marketplace_scraper.save_fb_config(config)
+                            st.success(f"✅ Saved! Connected as: {result.get('fb_name')}")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Cannot save invalid token: {result}")
+
+            if current_token:
+                st.markdown("---")
+                if st.button("🗑️ Remove Token", help="Delete saved access token"):
+                    config = marketplace_scraper.load_fb_config()
+                    config.pop('access_token', None)
+                    marketplace_scraper.save_fb_config(config)
+                    st.success("Token removed")
+                    st.rerun()
+
+            st.markdown("---")
+            st.subheader("📊 Database Configuration")
+
+            # Show provider_config table if it exists
+            try:
+                conn = sqlite3.connect(selected_db)
+                cur = conn.cursor()
+
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='provider_config'")
+                if cur.fetchone():
+                    cur.execute("SELECT config_key, config_value, description FROM provider_config ORDER BY config_key")
+                    config_rows = cur.fetchall()
+
+                    st.markdown("**Provider Configuration (from database):**")
+                    for key, value, desc in config_rows:
+                        st.text(f"{key}: {value}")
+                        if desc:
+                            st.caption(desc)
+                else:
+                    st.info("Run `python migrate_for_api_support.py` to add API support tables")
+
+                conn.close()
+            except Exception as e:
+                st.warning(f"Could not load database config: {e}")
+
+            st.markdown("---")
+            st.subheader("📖 Architecture")
+            st.markdown("""
+            **Future-Proofing Strategy:**
+
+            | Phase | Status | Description |
+            |-------|--------|-------------|
+            | 1. Scraper | ✅ Active | Browser automation |
+            | 2. Hybrid | 🔜 Ready | API + Scraper fallback |
+            | 3. Full API | 🔮 Planned | When FB opens access |
+
+            **Key Files:**
+            - `data_providers.py` - Provider interface
+            - `provider_manager.py` - Provider lifecycle
+            - `migrate_for_api_support.py` - DB migration
+            - `FACEBOOK_API_ARCHITECTURE.md` - Full docs
+            """)
+
+    # ========== TAB 7: Marketplace ==========
+    with tab7:
+        st.header("🛒 My Marketplace Listings")
+
+        user = st.session_state.fb_logged_in_user
+        items = st.session_state.marketplace_items
+
+        if not st.session_state.firefox_ready:
+            st.warning("🦊 Firefox required for marketplace features")
+            st.info("Open Firefox, log into Facebook, then refresh this page")
+        elif not user:
+            st.info("🔍 Detecting your Facebook login...")
+            if st.button("🔄 Detect Now", type="primary", help="Open Firefox to detect your Facebook login"):
+                st.session_state.run_fb_detection = True
+                st.rerun()
+        else:
+            # User is logged in - show their info and listings
+            user_name = user.get('fb_name') or user.get('fb_username') or 'Facebook User'
+
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.success(f"👤 Logged in as: **{user_name}**")
+            with col2:
+                st.metric("Total Listings", len(items))
+            with col3:
+                if st.button("🔄 Refresh Listings", type="secondary", help="Rescan Facebook Marketplace for your current listings"):
+                    st.session_state.run_marketplace_scan = True
+                    st.rerun()
+
+            st.markdown("---")
+
+            if not items:
+                st.info("No listings found. Click 'Refresh Listings' to scan your marketplace.")
+                if st.button("📦 Scan My Listings Now", type="primary", use_container_width=True, help="Open Firefox and scan your Facebook Marketplace selling items"):
+                    st.session_state.run_marketplace_scan = True
+                    st.rerun()
+            else:
+                # Display listings
+                st.subheader(f"📦 Your {len(items)} Listings")
+
+                # View mode toggle
+                view_mode = st.radio("View", ["📋 Table", "🃏 Cards"], horizontal=True, label_visibility="collapsed")
+
+                # Filter options
+                col1, col2 = st.columns(2)
+                with col1:
+                    search = st.text_input("🔍 Search", placeholder="Filter by title...")
+                with col2:
+                    sort_by = st.selectbox("Sort by", ["Newest", "Price (Low)", "Price (High)", "Title"])
+
+                # Create DataFrame from items
+                items_df = pd.DataFrame(items)
+
+                # Filter
+                if search and not items_df.empty:
+                    items_df = items_df[items_df['title'].str.contains(search, case=False, na=False)]
+
+                if view_mode == "📋 Table":
+                    # TABLE VIEW - like profiles
+                    if not items_df.empty:
+                        # Select columns to display
+                        display_cols = ['item_id', 'title', 'price', 'status', 'bump_count', 'days_until_next_bump', 'item_url']
+                        available_cols = [c for c in display_cols if c in items_df.columns]
+                        st.dataframe(items_df[available_cols], use_container_width=True, height=400)
+
+                        # Detailed view for selected item
+                        st.markdown("---")
+                        st.subheader("📄 Listing Details")
+
+                        selected_id = st.selectbox("Select Listing", items_df['item_id'].tolist())
+                        if selected_id:
+                            item = items_df[items_df['item_id'] == selected_id].iloc[0].to_dict()
+
+                            col1, col2 = st.columns([1, 2])
+                            with col1:
+                                # Show image
+                                local_img = item.get('local_image_path') or item.get('local_image_paths')
+                                remote_img = item.get('image_url') or item.get('image_urls')
+                                if local_img and Path(str(local_img)).exists():
+                                    st.image(local_img, use_container_width=True)
+                                elif remote_img:
+                                    try:
+                                        st.image(remote_img, use_container_width=True)
+                                    except:
+                                        st.info("📷 No image")
+                                else:
+                                    st.info("📷 No image available")
+
+                            with col2:
+                                st.markdown(f"**Title:** {item.get('title', 'N/A')}")
+                                st.markdown(f"**Price:** {item.get('price', 'N/A')}")
+
+                                # Status with badge
+                                status = item.get('status', 'available')
+                                status_badges = {
+                                    'available': '🟢 Available',
+                                    'pending': '🟡 Pending',
+                                    'sold': '🔴 Sold',
+                                    'draft': '⚪ Draft'
+                                }
+                                st.markdown(f"**Status:** {status_badges.get(status, status)}")
+
+                                # Bump info
+                                bump_count = item.get('bump_count', 0)
+                                max_bumps = item.get('max_bump_count', 5)
+                                days_next = item.get('days_until_next_bump')
+                                if bump_count is not None:
+                                    bump_text = f"{bump_count}/{max_bumps} bumps used"
+                                    if days_next is not None:
+                                        bump_text += f" (next in {days_next} days)"
+                                    st.markdown(f"**Bumps:** {bump_text}")
+
+                                st.markdown(f"**Item ID:** {item.get('item_id', 'N/A')}")
+                                if item.get('item_url'):
+                                    st.link_button("🔗 View on Facebook", item['item_url'])
+                    else:
+                        st.info("No listings match your search")
+                else:
+                    # CARDS VIEW
+                    filtered = items_df.to_dict('records') if not items_df.empty else []
+                    cols = st.columns(3)
+                    for idx, item in enumerate(filtered):
+                        with cols[idx % 3]:
+                            with st.container(border=True):
+                                local_img = item.get('local_image_path') or item.get('local_image_paths')
+                                remote_img = item.get('image_url') or item.get('image_urls')
+
+                                if local_img and Path(str(local_img)).exists():
+                                    st.image(local_img, use_container_width=True)
+                                elif remote_img:
+                                    try:
+                                        st.image(remote_img, use_container_width=True)
+                                    except:
+                                        pass
+
+                                title = item.get('title', 'Untitled')
+                                price = item.get('price', 'N/A')
+                                item_url = item.get('item_url', '')
+                                status = item.get('status', 'available')
+
+                                # Status badge
+                                status_icons = {'available': '🟢', 'pending': '🟡', 'sold': '🔴', 'draft': '⚪'}
+                                status_icon = status_icons.get(status, '⚪')
+
+                                st.markdown(f"**{title[:50]}**")
+                                st.markdown(f"💵 {price} {status_icon}")
+                                if item_url:
+                                    st.link_button("View", item_url, use_container_width=True)
+
+                # Export option
+                st.markdown("---")
+                if st.button("📥 Export Listings to CSV", help="Download all listings as CSV"):
+                    csv = items_df.to_csv(index=False)
+                    st.download_button(
+                        "⬇️ Download CSV",
+                        csv,
+                        "my_marketplace_listings.csv",
+                        "text/csv"
+                    )
 
 
 if __name__ == '__main__':

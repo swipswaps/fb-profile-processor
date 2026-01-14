@@ -1,35 +1,60 @@
-# Facebook Profile URL Processor
+# Facebook Profile & Marketplace Manager
 
-A production-ready Python tool that transforms Facebook Marketplace profile URLs, fetches metadata, and stores results in a SQLite database.
+A comprehensive Python tool for managing Facebook Marketplace seller profiles and your own marketplace listings. Features a Streamlit dashboard with real-time browser integration.
 
-## Two-Stage Architecture
+## 🚀 Project Evolution
 
-### Stage 1: HTTP Collection (`fb_profile_processor.py`)
-Fast bulk URL collection using HTTP requests - no authentication required.
+This project evolved through several phases:
 
-### Stage 2: Browser Enrichment (`browser_enricher.py`)
-Resolves numeric IDs to usernames and extracts full profile data using Playwright.
+### Phase 1: URL Processor (Original)
+- Simple HTTP-based URL transformer for Facebook Marketplace profile URLs
+- Extracted metadata using OpenGraph tags
+- SQLite storage with basic deduplication
+
+### Phase 2: Browser Enrichment
+- Added Playwright-based browser automation for deeper profile data
+- Resolved numeric IDs to usernames
+- Extracted profile pictures, bios, and follower counts
+
+### Phase 3: Firefox Integration (Current)
+- Switched from Chrome/Playwright to **Firefox + Selenium** for better compatibility
+- Uses your existing Firefox profile (no separate login needed)
+- Added **Streamlit dashboard** for visual management
+
+### Phase 4: Marketplace Integration (Current)
+- Added **My Marketplace** feature to scan your own selling items
+- Extracts item details: title, price, images, status (available/pending/sold)
+- Tracks bump counts and days until next bump
+- Future-proofed for Facebook Graph API when access becomes available
 
 ## Features
 
-### Stage 1 (HTTP Collection)
+### 🎛️ Streamlit Dashboard (`dashboard_integrated.py`)
+- **Visual profile management** - View, filter, and export seller profiles
+- **My Marketplace** - Scan and track your own Facebook Marketplace listings
+- **Image gallery** - View profile pictures and item images
+- **Export options** - CSV, JSON, ZIP with images
+- **Real-time enrichment** - One-click browser enrichment
+
+### 📋 Profile Collection (`fb_profile_processor.py`)
 ✅ **URL Transformation** - Converts marketplace URLs to clean profile format
 ✅ **HTTP Metadata Extraction** - Fetches page titles and OpenGraph tags
 ✅ **SQLite Storage** - Structured database with deduplication
 ✅ **Resume Capability** - Skip already-processed URLs
-✅ **Retry Logic** - Exponential backoff for failed requests
-✅ **Rate Limiting** - Configurable delay between requests (default: 1 req/sec)
-✅ **Export Formats** - JSON, CSV, and SQL dump
-✅ **Progress Tracking** - Real-time percentage indicators
-✅ **Dual Logging** - Console + file output
-✅ **Error Handling** - Comprehensive exception management
+✅ **Rate Limiting** - Configurable delay between requests
 
-### Stage 2 (Browser Enrichment)
-✅ **Profile Resolution** - Numeric ID → username URL (e.g., `100000563858165` → `kristi.sutphin.9`)
+### 🔍 Browser Enrichment (`selenium_enricher.py`)
+✅ **Firefox Integration** - Uses your existing Firefox profile (stay logged in!)
+✅ **Profile Resolution** - Numeric ID → username URL
 ✅ **Full Profile Data** - Name, bio, location, followers, profile picture
-✅ **Existing Session** - Connects to your logged-in Chrome (no new login needed)
-✅ **Incremental Enrichment** - Process profiles in batches, resume anytime
-✅ **Human-like Delays** - Random delays (2-4 seconds) to avoid detection
+✅ **Profile Picture Download** - Saves images locally
+
+### 🛒 Marketplace Scanner (`marketplace_scraper.py`)
+✅ **My Listings** - Scans your Facebook Marketplace selling items
+✅ **Status Tracking** - Available, Pending, Sold, Draft
+✅ **Bump Info** - Tracks bump count and days until next bump
+✅ **Image Extraction** - Primary listing photos
+✅ **API Ready** - Future-proofed for Facebook Graph API
 
 ## 🌐 Live Demo
 
@@ -37,231 +62,257 @@ Resolves numeric IDs to usernames and extracts full profile data using Playwrigh
 
 The web interface provides instant URL transformation without any installation!
 
-## Requirements
+---
 
-- Python 3.8 or higher
-- `requests` library (optional for Stage 1, falls back to stdlib `urllib`)
-- `playwright` library (required for Stage 2)
+## 📋 Complete How-To Guide
 
-## Installation
+### Prerequisites
+
+- **Python 3.8+** installed
+- **Firefox browser** with your Facebook account logged in
+- **pip** package manager
+
+### Step 1: Installation
 
 ```bash
 # Clone the repository
 git clone https://github.com/swipswaps/fb-profile-processor.git
 cd fb-profile-processor
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
-
-# Install Playwright browsers (for Stage 2)
-playwright install chromium
 ```
 
-## Usage
+**Required packages:**
+- `streamlit` - Dashboard UI
+- `selenium` - Browser automation
+- `requests` - HTTP requests
+- `pandas` - Data processing
+- `Pillow` - Image handling
 
-### Stage 1: HTTP Collection (Fast Bulk Processing)
+### Step 2: Firefox Setup (One-Time)
+
+The tool uses your existing Firefox profile to access Facebook. No separate login needed!
+
+1. **Open Firefox** and log into Facebook
+2. **Stay logged in** (check "Remember me")
+3. **Close Firefox** before running the dashboard
+
+The tool will automatically find your Firefox profile and use your existing session.
+
+### Step 3: Run the Dashboard
 
 ```bash
-# Process URLs from links.txt (default)
+# Start the Streamlit dashboard
+streamlit run dashboard_integrated.py
+
+# Or with custom port
+streamlit run dashboard_integrated.py --server.port 8502
+```
+
+The dashboard opens at: **http://localhost:8501**
+
+### Step 4: Using the Dashboard
+
+#### Tab 1: 📥 Add URLs
+1. Paste Facebook Marketplace profile URLs (one per line)
+2. Or upload a `.txt` file with URLs
+3. Click **"Process URLs"** to add to database
+
+Example URLs:
+```
+https://www.facebook.com/marketplace/profile/123456789/
+https://www.facebook.com/marketplace/profile/987654321/?ref=share
+```
+
+#### Tab 2: 👤 Profiles
+- View all collected profiles in table or card view
+- Filter by name, location, or status
+- Click profile to see details and image
+
+#### Tab 3: 🔍 Enrichment
+1. Click **"🦊 Enrich with Firefox"**
+2. Firefox opens briefly to collect profile data
+3. Watch progress in real-time
+4. Results saved automatically
+
+#### Tab 4: 📈 Analytics
+- View statistics on collected profiles
+- Charts showing processing status
+- Database size and health info
+
+#### Tab 5: 💾 Export
+- **CSV** - Spreadsheet format
+- **JSON** - Developer-friendly
+- **ZIP** - Includes profile images
+
+#### Tab 6: ⚙️ Settings
+- Configure database location
+- Set up Facebook API token (optional, for future use)
+
+#### Tab 7: 🛒 Marketplace
+1. Click **"Scan My Listings"** in sidebar
+2. Firefox opens to scan your selling items
+3. View your listings with:
+   - Title, price, status badges
+   - Bump count and days until next bump
+   - Direct links to Facebook
+
+---
+
+## 🛠️ Command-Line Usage
+
+### Profile Collection (HTTP-only)
+
+```bash
+# Process URLs from links.txt
 python3 fb_profile_processor.py
 
-# Specify custom input file
+# Custom input file
 python3 fb_profile_processor.py --input my_urls.txt
 
-# Custom output database
-python3 fb_profile_processor.py --output my_database.db
-
 # Export results
-python3 fb_profile_processor.py --export-json results.json --export-csv results.csv
-```
-
-### Stage 2: Browser Enrichment (Detailed Profile Data)
-
-**Step 1: Launch Chrome with Remote Debugging**
-
-```bash
-# Close ALL Chrome windows first, then:
-
-# Linux:
-google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/google-chrome"
-
-# macOS:
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/Library/Application Support/Google/Chrome"
-
-# Windows:
-"C:\Program Files\Google\Chrome\Application\chrome.exe" ^
-  --remote-debugging-port=9222 ^
-  --user-data-dir="%USERPROFILE%\AppData\Local\Google\Chrome\User Data"
-```
-
-**Step 2: Log into Facebook** in that Chrome window (normal login, stays logged in)
-
-**Step 3: Run Browser Enrichment**
-
-```bash
-# Enrich all pending profiles
-python3 browser_enricher.py --database test_profiles.db
-
-# Limit to first 10 profiles (for testing)
-python3 browser_enricher.py --database test_profiles.db --limit 10
-
-# Custom delay between requests (default: 3 seconds)
-python3 browser_enricher.py --database test_profiles.db --delay 5.0
-
-# Verbose logging
-python3 browser_enricher.py --database test_profiles.db --verbose
-```
-
-### Advanced Options
-
-```bash
-# Adjust rate limiting (2 seconds between requests)
-python3 fb_profile_processor.py --rate-limit 2.0
-
-# Increase timeout for slow connections
-python3 fb_profile_processor.py --timeout 30
-
-# Enable verbose logging
-python3 fb_profile_processor.py --verbose
-
-# Export results to JSON
 python3 fb_profile_processor.py --export-json results.json
-
-# Export results to CSV
-python3 fb_profile_processor.py --export-csv results.csv
-
-# Export database to SQL dump
-python3 fb_profile_processor.py --export-sql dump.sql
 ```
 
-### Complete Example
+### Browser Enrichment (Firefox)
 
 ```bash
-python3 fb_profile_processor.py \
-  --input links.txt \
-  --output profiles.db \
-  --rate-limit 1.5 \
-  --timeout 20 \
-  --verbose \
-  --export-json output.json \
-  --log-file processing.log
+# Enrich pending profiles
+python3 selenium_enricher.py --database facebook_profiles.db --limit 10
 ```
 
-## Input Format
+### Marketplace Scanning
 
-Create a text file (e.g., `links.txt`) with one URL per line:
-
-```
-https://www.facebook.com/marketplace/profile/123456789/?ref=share
-https://www.facebook.com/marketplace/profile/987654321/?param=value
-# Comments are supported
-https://www.facebook.com/marketplace/profile/555555555/
+```bash
+# Scan your marketplace listings
+python3 marketplace_scraper.py --scan --limit 50
 ```
 
-## Database Schema
+---
+
+## 📁 Database Schema
+
+### Profiles Table (`facebook_profiles.db`)
 
 ```sql
 CREATE TABLE profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     input_url TEXT NOT NULL UNIQUE,
     resolved_url TEXT,
-    http_status INTEGER,
-    page_title TEXT,
-    og_title TEXT,
-    og_description TEXT,
-    fetched_at TEXT,
+    profile_id TEXT,
+    username TEXT,
+    display_name TEXT,
+    profile_picture_url TEXT,
+    local_image_path TEXT,
+    bio TEXT,
+    location TEXT,
+    join_date TEXT,
+    enriched INTEGER DEFAULT 0,
+    enriched_at TEXT,
     error TEXT
 );
 ```
 
-## Querying Results
+### Marketplace Items Table (`marketplace.db`)
 
-```bash
-# Open database
-sqlite3 facebook_profiles.db
-
-# View all profiles
-SELECT * FROM profiles;
-
-# View successful fetches only
-SELECT input_url, page_title, og_title FROM profiles WHERE error IS NULL;
-
-# View errors
-SELECT input_url, error FROM profiles WHERE error IS NOT NULL;
-
-# Count statistics
-SELECT 
-  COUNT(*) as total,
-  SUM(CASE WHEN error IS NULL THEN 1 ELSE 0 END) as successful,
-  SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as failed
-FROM profiles;
+```sql
+CREATE TABLE marketplace_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT UNIQUE,
+    title TEXT,
+    price TEXT,
+    status TEXT DEFAULT 'available',
+    is_sold INTEGER DEFAULT 0,
+    is_pending INTEGER DEFAULT 0,
+    is_draft INTEGER DEFAULT 0,
+    bump_count INTEGER DEFAULT 0,
+    days_until_next_bump INTEGER,
+    max_bump_count INTEGER DEFAULT 5,
+    image_urls TEXT,
+    local_image_paths TEXT,
+    seller_id TEXT,
+    seller_name TEXT,
+    item_url TEXT,
+    scraped_at TEXT,
+    updated_at TEXT
+);
 ```
 
-## Architecture
+---
 
-### URL Transformation (Rule 27)
-- Uses regex pattern: `r'facebook\.com/marketplace/profile/(\d+)'`
-- Extracts profile ID and creates clean URL
-- Validates before HTTP requests
+## 🏗️ Architecture
 
-### HTTP Safety (Rule 12)
-- 15-second default timeout
-- 1 req/sec rate limiting (configurable)
-- 3 retry attempts with exponential backoff
-- Proper error handling for connection/timeout/HTTP errors
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Streamlit Dashboard                       │
+│                  (dashboard_integrated.py)                   │
+├─────────────────────────────────────────────────────────────┤
+│  Add URLs │ Profiles │ Enrichment │ Analytics │ Marketplace │
+└─────────────────────────────────────────────────────────────┘
+        │           │           │                    │
+        ▼           ▼           ▼                    ▼
+┌───────────┐ ┌───────────┐ ┌─────────────┐ ┌─────────────────┐
+│   HTTP    │ │  SQLite   │ │   Firefox   │ │   Marketplace   │
+│ Processor │ │ Database  │ │  Selenium   │ │    Scraper      │
+└───────────┘ └───────────┘ └─────────────┘ └─────────────────┘
+```
 
-### SQLite Safety (Rule 11)
-- Schema matches specification exactly
-- PRAGMA verification on initialization
-- Transactions for data integrity
-- Indexed for fast duplicate checking
+### Key Components
 
-### HTML Metadata Extraction (Rule 19)
-- Parses OpenGraph tags (og:title, og:description)
-- Extracts `<title>` tag
-- Unescapes HTML entities
-- Handles malformed HTML gracefully
+| File | Purpose |
+|------|---------|
+| `dashboard_integrated.py` | Main Streamlit UI |
+| `fb_profile_processor.py` | HTTP-based URL collection |
+| `selenium_enricher.py` | Firefox browser enrichment |
+| `marketplace_scraper.py` | Personal marketplace scanner |
+| `docs/index.html` | GitHub Pages static demo |
 
-### Logging (Rule 25)
-- Uses Python `logging` module
-- Dual output (console + file)
-- Timestamps and log levels
-- Progress indicators for batch operations
-
-## Limitations
-
-- **No Browser Automation** - Uses HTTP requests only (Rule 35)
-- **Public Data Only** - No authentication or private profile access
-- **Rate Limiting Required** - Respects ethical scraping practices
-- **CORS in Browser** - React UI is prototype only; Python script is production solution
+---
 
 ## 🚀 GitHub Pages Setup
 
-To enable the web interface on GitHub Pages:
+The `/docs` folder contains a static HTML demo for URL transformation.
 
 1. Go to repository **Settings** → **Pages**
 2. Under **Source**, select:
    - Branch: `main`
    - Folder: `/docs`
 3. Click **Save**
-4. Wait 1-2 minutes for deployment
-5. Access at: `https://swipswaps.github.io/fb-profile-processor/`
+4. Access at: `https://swipswaps.github.io/fb-profile-processor/`
 
-## License
+---
+
+## ⚠️ Troubleshooting
+
+### Firefox not detected
+- Ensure Firefox is installed
+- Log into Facebook in Firefox first
+- Close Firefox before running dashboard
+
+### Enrichment fails
+- Check Firefox profile exists: `~/.mozilla/firefox/*.default-release`
+- Ensure Facebook session is valid (not expired)
+- Try logging into Facebook again
+
+### Marketplace scan empty
+- Verify you have active listings on Facebook Marketplace
+- Check Firefox is logged into the correct Facebook account
+
+---
+
+## 📄 License
 
 MIT License - See LICENSE file for details
 
-## Contributing
+## 🤝 Contributing
 
 Contributions welcome! Please ensure:
 - Python 3.8+ compatibility
-- All tests pass
 - Code follows project style
 - Documentation updated
 
-## Support
+## 📞 Support
 
 For issues or questions, please open a GitHub issue.
 
