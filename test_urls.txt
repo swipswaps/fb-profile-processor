@@ -1,0 +1,4 @@
+# Test URLs for end-to-end testing
+https://www.facebook.com/marketplace/profile/100000000000001/?ref=test
+https://www.facebook.com/marketplace/profile/100000000000002/
+https://www.facebook.com/not-a-marketplace-url

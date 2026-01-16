@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FB Profile Processor</title>
+    <meta name="description" content="Transform Facebook Marketplace profiles - Full toolset">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --card-bg: #ffffff;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --border-color: #e0e0e0;
+            --success-color: #27ae60;
+            --error-color: #e74c3c;
+            --primary-color: #667eea;
+            --warning-color: #f39c12;
+        }
+        
+        [data-theme="dark"] {
+            --bg-gradient-start: #1a202c;
+            --bg-gradient-end: #2d3748;
+            --card-bg: #2d3748;
+            --text-primary: #e2e8f0;
+            --text-secondary: #a0aec0;
+            --border-color: #4a5568;
+            --success-color: #48bb78;
+            --error-color: #fc8181;
+            --primary-color: #667eea;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            transition: background 0.3s;
+        }
+        
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 250px;
+            height: 100vh;
+            background: var(--card-bg);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            padding: 2rem 0;
+            overflow-y: auto;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .sidebar-header {
+            padding: 0 1.5rem 2rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .sidebar-header h2 {
+            font-size: 1.3rem;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .sidebar-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        .nav-menu {
+            padding: 1rem 0;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-primary);
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-item:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .nav-item.active {
+            background: rgba(102, 126, 234, 0.15);
+            border-left-color: var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .nav-icon {
+            font-size: 1.3rem;
+        }
+        
+        .docker-badge {
+            background: var(--warning-color);
+            color: white;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.3rem;
+            margin-left: auto;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        
+        .docker-banner {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .docker-banner-content {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .docker-banner h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.3rem;
+        }
+        
+        .docker-install-code {
+            background: #000;
+            color: #0f0;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.3rem;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.85rem;
+            display: inline-block;
+            margin-top: 0.3rem;
+        }
+        
+        .copy-install-btn {
+            background: #48bb78;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.4rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .banner-close {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .page-title {
+            font-size: 2rem;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .theme-toggle {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 2rem;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: var(--card-bg);
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+        }
+        
+        .disabled-overlay {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        
+        .disabled-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--warning-color);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            text-align: center;
+            z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            background: var(--card-bg);
+            color: var(--text-primary);
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--border-color);
+            border-radius: 0.5rem;
+            background: var(--card-bg);
+            color: var(--text-primary);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        th {
+            background: var(--primary-color);
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        [data-theme="dark"] .info-box {
+            background: #1e3a5f;
+            border-left-color: #2196f3;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>👤 FB Profile Processor</h2>
+            <p class="sidebar-subtitle">Full-featured dashboard</p>
+        </div>
+        
+        <nav class="nav-menu">
+            <div class="nav-item active" onclick="showPage('transform')">
+                <span class="nav-icon">🔗</span>
+                <span>URL Transform</span>
+            </div>
+            
+            <div class="nav-item" onclick="showPage('enrich')">
+                <span class="nav-icon">🌐</span>
+                <span>Profile Enrichment</span>
+                <span class="docker-badge">Docker</span>
+            </div>
+            
+            <div class="nav-item" onclick="showPage('database')">
+                <span class="nav-icon">🗄️</span>
+                <span>Database</span>
+                <span class="docker-badge">Docker</span>
+            </div>
+            
+            <div class="nav-item" onclick="showPage('analytics')">
+                <span class="nav-icon">📊</span>
+                <span>Analytics</span>
+            </div>
+            
+            <div class="nav-item" onclick="showPage('export')">
+                <span class="nav-icon">💾</span>
+                <span>Export Data</span>
+            </div>
+            
+            <div class="nav-item" onclick="showPage('settings')">
+                <span class="nav-icon">⚙️</span>
+                <span>Settings</span>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Docker Banner -->
+        <div id="dockerBanner" class="docker-banner">
+            <div class="docker-banner-content">
+                <h3>🚀 Unlock Full Features</h3>
+                <p>Install Docker for enrichment, database, and more:</p>
+                <code class="docker-install-code">curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash</code>
+            </div>
+            <button class="copy-install-btn" onclick="copyInstallScript()">📋 Copy</button>
+            <button class="banner-close" onclick="closeBanner()">×</button>
+        </div>
+
+        <div class="page-header">
+            <h1 class="page-title" id="pageTitle">URL Transform</h1>
+            <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+        </div>
+
+        <!-- Page: URL Transform -->
+        <div id="page-transform" class="page-content">
+            <div class="card">
+                <h2 class="section-title">📥 Input URLs</h2>
+                <label>Paste Facebook Marketplace profile URLs (one per line):</label>
+                <textarea id="urlInput" placeholder="https://www.facebook.com/marketplace/profile/123456789/?ref=share"></textarea>
+                <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="btn" onclick="processURLs()">🚀 Transform URLs</button>
+                    <label for="fileInput" class="btn btn-secondary">📁 Import File</label>
+                    <input type="file" id="fileInput" accept=".txt,.csv" onchange="importFile(event)" style="display:none;">
+                </div>
+            </div>
+
+            <div id="transformResults" style="display: none;">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalCount">0</div>
+                        <div>Total URLs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="successCount">0</div>
+                        <div>Successful</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="successRate">0%</div>
+                        <div>Success Rate</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="section-title">
+                        <span>📊 Results</span>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary" onclick="exportCSV()">📊 CSV</button>
+                            <button class="btn btn-secondary" onclick="exportJSON()">💾 JSON</button>
+                            <button class="btn btn-secondary" onclick="copyAllURLs()">📋 Copy All</button>
+                        </div>
+                    </h2>
+                    <div id="resultsTable"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Profile Enrichment -->
+        <div id="page-enrich" class="page-content hidden">
+            <div class="card disabled-overlay">
+                <div class="disabled-message">
+                    🐳 Requires Docker<br>
+                    <small>Install Docker to enable this feature</small>
+                </div>
+                <h2 class="section-title">🌐 Profile Enrichment</h2>
+                <div class="info-box">
+                    <strong>What is Profile Enrichment?</strong><br>
+                    Uses Firefox automation to fetch full profile data including:
+                    <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+                        <li>Profile name and bio</li>
+                        <li>Location and join date</li>
+                        <li>Profile pictures</li>
+                        <li>Additional metadata</li>
+                    </ul>
+                </div>
+                
+                <label>Profile URLs to enrich:</label>
+                <textarea placeholder="https://www.facebook.com/123456789"></textarea>
+                <button class="btn" style="margin-top: 1rem;">🚀 Start Enrichment</button>
+            </div>
+        </div>
+
+        <!-- Page: Database -->
+        <div id="page-database" class="page-content hidden">
+            <div class="card disabled-overlay">
+                <div class="disabled-message">
+                    🐳 Requires Docker<br>
+                    <small>Install Docker to enable database features</small>
+                </div>
+                <h2 class="section-title">🗄️ Database</h2>
+                <div class="info-box">
+                    <strong>Database Storage:</strong> Persistently store enriched profiles in SQLite database with full CRUD operations.
+                </div>
+                
+                <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                    <input type="text" placeholder="Search profiles..." style="flex: 1;">
+                    <button class="btn">🔍 Search</button>
+                    <button class="btn btn-secondary">➕ Add Profile</button>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Profile URL</th>
+                                <th>Name</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                    No profiles in database. Install Docker to enable database features.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Analytics -->
+        <div id="page-analytics" class="page-content hidden">
+            <div class="card">
+                <h2 class="section-title">📊 Analytics Dashboard</h2>
+                <div class="info-box">
+                    <strong>Browser-based Analytics:</strong> View statistics from your processed URLs.
+                </div>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="analyticsTotal">0</div>
+                        <div>Total Processed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="analyticsSuccess">0</div>
+                        <div>Successful</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="analyticsRate">0%</div>
+                        <div>Success Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="analyticsSessions">0</div>
+                        <div>Sessions</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 1rem;">📈 Processing History</h3>
+                    <div id="analyticsHistory"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Export -->
+        <div id="page-export" class="page-content hidden">
+            <div class="card">
+                <h2 class="section-title">💾 Export Data</h2>
+                <div class="info-box">
+                    <strong>Export Formats:</strong> Download your processed data in various formats.
+                </div>
+                
+                <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 1rem;">
+                    <div class="card" style="border: 2px solid var(--border-color);">
+                        <h3 style="margin-bottom: 0.5rem;">📊 CSV Export</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Compatible with Excel, Google Sheets</p>
+                        <button class="btn" onclick="exportCSV()">Download CSV</button>
+                    </div>
+                    
+                    <div class="card" style="border: 2px solid var(--border-color);">
+                        <h3 style="margin-bottom: 0.5rem;">💾 JSON Export</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Machine-readable format</p>
+                        <button class="btn" onclick="exportJSON()">Download JSON</button>
+                    </div>
+                    
+                    <div class="card disabled-overlay" style="border: 2px solid var(--border-color);">
+                        <div class="disabled-message" style="font-size: 0.9rem;">🐳 Docker</div>
+                        <h3 style="margin-bottom: 0.5rem;">📑 Excel Export</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Full .xlsx with formatting</p>
+                        <button class="btn">Download Excel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page: Settings -->
+        <div id="page-settings" class="page-content hidden">
+            <div class="card">
+                <h2 class="section-title">⚙️ Settings</h2>
+                
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">🎨 Appearance</h3>
+                    <label style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                        <span style="flex: 1;">Dark Mode</span>
+                        <button class="btn btn-secondary" onclick="toggleTheme()">Toggle Theme</button>
+                    </label>
+                </div>
+                
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">💾 Data Management</h3>
+                    <button class="btn btn-secondary" onclick="clearAllData()">🗑️ Clear All Data</button>
+                    <p style="color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.9rem;">
+                        Remove all locally stored data (processed URLs, history)
+                    </p>
+                </div>
+                
+                <div>
+                    <h3 style="margin-bottom: 1rem;">ℹ️ About</h3>
+                    <p style="color: var(--text-secondary);">
+                        FB Profile Processor v2.0<br>
+                        Transform and process Facebook Marketplace profile URLs<br>
+                        <br>
+                        <strong>Browser Features:</strong> URL transformation, localStorage, CSV/JSON export<br>
+                        <strong>Docker Features:</strong> Profile enrichment, database, Excel export
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let processedResults = [];
+        let currentPage = 'transform';
+
+        // Page Navigation
+        function showPage(page) {
+            // Hide all pages
+            document.querySelectorAll('.page-content').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            
+            // Show selected page
+            document.getElementById(`page-${page}`).classList.remove('hidden');
+            event.target.closest('.nav-item').classList.add('active');
+            
+            // Update title
+            const titles = {
+                'transform': 'URL Transform',
+                'enrich': 'Profile Enrichment',
+                'database': 'Database',
+                'analytics': 'Analytics',
+                'export': 'Export Data',
+                'settings': 'Settings'
+            };
+            document.getElementById('pageTitle').textContent = titles[page];
+            currentPage = page;
+            
+            // Update analytics if on analytics page
+            if (page === 'analytics') {
+                updateAnalytics();
+            }
+        }
+
+        // Theme Management
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            document.querySelector('.theme-toggle').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        }
+
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        if (savedTheme === 'dark') document.querySelector('.theme-toggle').textContent = '☀️';
+
+        // Banner
+        function copyInstallScript() {
+            const script = 'curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash';
+            navigator.clipboard.writeText(script).then(() => {
+                event.target.textContent = '✅ Copied!';
+                setTimeout(() => event.target.textContent = '📋 Copy', 2000);
+            });
+        }
+
+        function closeBanner() {
+            document.getElementById('dockerBanner').classList.add('hidden');
+            localStorage.setItem('dockerBannerClosed', 'true');
+        }
+
+        if (localStorage.getItem('dockerBannerClosed') === 'true') {
+            document.getElementById('dockerBanner').classList.add('hidden');
+        }
+
+        // Storage
+        function saveToStorage(profiles) {
+            const data = {
+                profiles: profiles,
+                timestamp: new Date().toISOString(),
+                count: profiles.length
+            };
+            localStorage.setItem('fb_profiles_current', JSON.stringify(data));
+            
+            const history = getHistory();
+            history.unshift(data);
+            if (history.length > 10) history.pop();
+            localStorage.setItem('fb_profiles_history', JSON.stringify(history));
+        }
+
+        function loadFromStorage() {
+            const data = localStorage.getItem('fb_profiles_current');
+            return data ? JSON.parse(data).profiles : [];
+        }
+
+        function getHistory() {
+            const data = localStorage.setItem('fb_profiles_history');
+            return data ? JSON.parse(data) : [];
+        }
+
+        // File Import
+        function importFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => document.getElementById('urlInput').value = e.target.result;
+            reader.readAsText(file);
+        }
+
+        // URL Processing
+        function transformURL(url) {
+            const match = url.match(/marketplace\/profile\/(\d+)/);
+            if (match) {
+                return {
+                    clean: `https://www.facebook.com/${match[1]}`,
+                    id: match[1],
+                    valid: true
+                };
+            }
+            return { clean: null, id: null, valid: false };
+        }
+
+        function processURLs() {
+            const input = document.getElementById('urlInput').value;
+            const urls = input.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+
+            if (urls.length === 0) {
+                alert('Please enter at least one URL');
+                return;
+            }
+
+            processedResults = [];
+            let successCount = 0;
+
+            urls.forEach((url, index) => {
+                const result = transformURL(url);
+                const item = {
+                    id: index + 1,
+                    original_url: url,
+                    clean_url: result.clean,
+                    profile_id: result.id,
+                    valid: result.valid,
+                    timestamp: new Date().toISOString()
+                };
+
+                processedResults.push(item);
+                if (result.valid) successCount++;
+            });
+
+            const successRate = ((successCount / urls.length) * 100).toFixed(1);
+
+            document.getElementById('totalCount').textContent = urls.length;
+            document.getElementById('successCount').textContent = successCount;
+            document.getElementById('successRate').textContent = successRate + '%';
+            
+            saveToStorage(processedResults);
+            displayResults();
+            document.getElementById('transformResults').style.display = 'block';
+        }
+
+        function displayResults() {
+            const table = document.getElementById('resultsTable');
+            table.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Original URL</th>
+                            <th>Transformed URL</th>
+                            <th>Profile ID</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${processedResults.map(item => `
+                            <tr>
+                                <td>${item.id}</td>
+                                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${item.original_url}</td>
+                                <td>${item.valid ? item.clean_url : '-'}</td>
+                                <td>${item.profile_id || '-'}</td>
+                                <td>${item.valid ? '✅ Valid' : '❌ Invalid'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        // Export Functions
+        function exportJSON() {
+            if (processedResults.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            const dataStr = JSON.stringify(processedResults, null, 2);
+            downloadFile(dataStr, `fb_profiles_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
+        }
+
+        function exportCSV() {
+            if (processedResults.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            const headers = ['ID', 'Original URL', 'Transformed URL', 'Profile ID', 'Valid', 'Timestamp'];
+            const rows = processedResults.map(p => [
+                p.id,
+                `"${p.original_url}"`,
+                `"${p.clean_url || ''}"`,
+                p.profile_id || '',
+                p.valid ? 'Yes' : 'No',
+                p.timestamp
+            ]);
+            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            downloadFile(csv, `fb_profiles_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
+        }
+
+        function copyAllURLs() {
+            if (processedResults.length === 0) {
+                alert('No data to copy');
+                return;
+            }
+            const urls = processedResults.filter(p => p.valid).map(p => p.clean_url).join('\n');
+            navigator.clipboard.writeText(urls).then(() => {
+                alert(`Copied ${processedResults.filter(p => p.valid).length} URLs to clipboard!`);
+            });
+        }
+
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type: type });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Analytics
+        function updateAnalytics() {
+            const history = getHistory();
+            const allProfiles = history.flatMap(h => h.profiles || []);
+            const successCount = allProfiles.filter(p => p.valid).length;
+            const totalCount = allProfiles.length;
+            const successRate = totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) : 0;
+
+            document.getElementById('analyticsTotal').textContent = totalCount;
+            document.getElementById('analyticsSuccess').textContent = successCount;
+            document.getElementById('analyticsRate').textContent = successRate + '%';
+            document.getElementById('analyticsSessions').textContent = history.length;
+
+            const historyDiv = document.getElementById('analyticsHistory');
+            if (history.length === 0) {
+                historyDiv.innerHTML = '<p style="color: var(--text-secondary); padding: 2rem; text-align: center;">No processing history yet.</p>';
+            } else {
+                historyDiv.innerHTML = history.map((item, index) => `
+                    <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                        <strong>${new Date(item.timestamp).toLocaleString()}</strong><br>
+                        <span style="color: var(--text-secondary);">${item.count} profiles processed</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Settings
+        function clearAllData() {
+            if (confirm('Clear all locally stored data? This cannot be undone.')) {
+                localStorage.removeItem('fb_profiles_current');
+                localStorage.removeItem('fb_profiles_history');
+                processedResults = [];
+                document.getElementById('transformResults').style.display = 'none';
+                alert('All data cleared!');
+            }
+        }
+
+        // Load saved data on page load
+        window.addEventListener('load', () => {
+            const saved = loadFromStorage();
+            if (saved.length > 0) {
+                processedResults = saved;
+                displayResults();
+                
+                const successCount = saved.filter(p => p.valid).length;
+                const successRate = ((successCount / saved.length) * 100).toFixed(1);
+                
+                document.getElementById('totalCount').textContent = saved.length;
+                document.getElementById('successCount').textContent = successCount;
+                document.getElementById('successRate').textContent = successRate + '%';
+                document.getElementById('transformResults').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

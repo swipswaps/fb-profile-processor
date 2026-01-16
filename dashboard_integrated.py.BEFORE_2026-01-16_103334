@@ -130,62 +130,6 @@ def is_api_ready(db_path: str) -> bool:
     return check_api_schema_version(db_path) >= 5
 
 
-def detect_schema_type(db_path: str) -> tuple:
-    """
-    Detect database schema type by inspecting tables and columns.
-    Improved version that handles both marketplace and profile databases.
-
-    Returns:
-        (schema_type, table_name, column_list)
-        schema_type: 'profile', 'marketplace', or 'unknown'
-    """
-    logger.debug(f"Detecting schema for: {db_path}")
-    try:
-        conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
-        cursor = conn.cursor()
-
-        # Get all tables
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in cursor.fetchall()]
-
-        if not tables:
-            conn.close()
-            logger.info(f"Empty database: {db_path}")
-            return 'empty', None, []
-
-        # Check for known tables
-        if 'marketplace_items' in tables:
-            cursor.execute("PRAGMA table_info(marketplace_items)")
-            columns = [row[1] for row in cursor.fetchall()]
-            conn.close()
-            logger.info(f"Detected marketplace schema: {len(columns)} columns")
-            return 'marketplace', 'marketplace_items', columns
-
-        if 'profiles' in tables:
-            cursor.execute("PRAGMA table_info(profiles)")
-            columns = [row[1] for row in cursor.fetchall()]
-            conn.close()
-            logger.info(f"Detected profile schema: {len(columns)} columns")
-            return 'profile', 'profiles', columns
-
-        # Unknown - use first table
-        table = tables[0]
-        cursor.execute(f"PRAGMA table_info({table})")
-        columns = [row[1] for row in cursor.fetchall()]
-        conn.close()
-        logger.warning(f"Unknown schema in table '{table}': {columns}")
-        return 'unknown', table, columns
-
-    except Exception as e:
-        logger.error(f"Schema detection failed: {e}")
-        return 'error', None, []
-
-
-def safe_col(df: pd.DataFrame, col: str, default=None):
-    """Safely get column from dataframe, return default if missing."""
-    return df[col] if col in df.columns else default
-
-
 def get_database_with_schema_info(db_path: str) -> str:
     """Get database display name with schema info"""
     if not Path(db_path).exists():
@@ -271,8 +215,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state EARLY (before any rendering)
-# Per Rule 25: Log session state initialization
+# Initialize session state
 logger.debug("Initializing session state")
 if 'processing' not in st.session_state:
     st.session_state.processing = False
@@ -288,13 +231,6 @@ if 'fb_logged_in_user' not in st.session_state:
     st.session_state.fb_logged_in_user = None
 if 'marketplace_items' not in st.session_state:
     st.session_state.marketplace_items = []
-
-# CRITICAL: Initialize active_tab BEFORE any UI rendering
-# This prevents tab jumping on first widget interaction (known Streamlit pattern)
-# See: https://discuss.streamlit.io/t/st-tabs-how-to-prevent-rerun-and-jumping-back-to-tab-1/30202
-if 'active_tab' not in st.session_state:
-    st.session_state.active_tab = 0  # Default to first tab (Upload & Process)
-    logger.info("session_state.active_tab initialized to: 0 (Upload & Process)")
 
 # Check Firefox readiness EARLY (before sidebar renders)
 if st.session_state.firefox_ready is None:
@@ -362,71 +298,25 @@ def load_data(db_path):
         return pd.DataFrame()
 
 
-def get_database_stats(df, schema_type: str = 'profile') -> dict:
-    """
-    Calculate database statistics based on schema type.
-
-    Args:
-        df: DataFrame with data
-        schema_type: 'profile', 'marketplace', or 'unknown'
-
-    Returns:
-        dict with schema-appropriate statistics
-    """
-    logger.debug(f"Calculating stats for schema: {schema_type}, rows: {len(df)}")
-
+def get_database_stats(df):
+    """Calculate database statistics (Graph API compatible)"""
     if df.empty:
-        return {'total_records': 0}
+        return {}
 
-    stats = {'total_records': len(df)}
+    # Handle both old and new schema
+    error_col = 'http_error' if 'http_error' in df.columns else 'error'
+    pic_col = 'fb_picture_url' if 'fb_picture_url' in df.columns else 'browser_profile_pic_url'
 
-    if schema_type == 'profile':
-        # Profile schema stats (original logic, improved)
-        error_col = 'http_error' if 'http_error' in df.columns else 'error'
-        pic_col = 'fb_picture_url' if 'fb_picture_url' in df.columns else 'browser_profile_pic_url'
+    stats = {
+        'total_records': len(df),
+        'successful': len(df[df[error_col].isna()]),
+        'errors': len(df[df[error_col].notna()]),
+        'pending_enrichment': len(df[df['enrichment_status'] == 'pending']),
+        'enriched': len(df[df['enrichment_status'] == 'enriched']),
+        'failed_enrichment': len(df[df['enrichment_status'] == 'failed']),
+        'with_images': len(df[df[pic_col].notna()]),
+    }
 
-        if error_col in df.columns:
-            stats['successful'] = len(df[df[error_col].isna()])
-            stats['errors'] = len(df[df[error_col].notna()])
-        else:
-            stats['successful'] = len(df)
-            stats['errors'] = 0
-
-        if 'enrichment_status' in df.columns:
-            stats['pending_enrichment'] = len(df[df['enrichment_status'] == 'pending'])
-            stats['enriched'] = len(df[df['enrichment_status'] == 'enriched'])
-            stats['failed_enrichment'] = len(df[df['enrichment_status'] == 'failed'])
-        else:
-            stats['pending_enrichment'] = 0
-            stats['enriched'] = 0
-            stats['failed_enrichment'] = 0
-
-        if pic_col in df.columns:
-            stats['with_images'] = len(df[df[pic_col].notna()])
-
-    elif schema_type == 'marketplace':
-        # Marketplace schema stats (new)
-        if 'status' in df.columns:
-            stats['available'] = len(df[df['status'] == 'available'])
-            stats['sold'] = len(df[df['status'] == 'sold'])
-            stats['pending'] = len(df[df['status'] == 'pending'])
-            stats['draft'] = len(df[df['status'] == 'draft'])
-
-        if 'price' in df.columns:
-            valid_prices = df['price'].notna() & ~df['price'].isin(['', 'See on Facebook'])
-            stats['with_price'] = len(df[valid_prices])
-
-        if 'title' in df.columns:
-            stats['with_title'] = len(df[df['title'].notna() & (df['title'] != '')])
-
-        if 'bump_count' in df.columns:
-            stats['total_bumps'] = int(df['bump_count'].sum()) if df['bump_count'].notna().any() else 0
-
-        if 'days_until_next_bump' in df.columns:
-            bumpable = df['days_until_next_bump'].notna() & (df['days_until_next_bump'] <= 0)
-            stats['ready_to_bump'] = len(df[bumpable])
-
-    logger.debug(f"Stats calculated: {stats}")
     return stats
 
 
@@ -609,8 +499,8 @@ def enrich_with_browser_ui(db_file, rate_limit=3.0):
         if driver:
             try:
                 driver.quit()
-            except Exception as e:
-                logger.debug(f"Driver cleanup error (ignored): {e}")
+            except:
+                pass
         if temp_profile_dir:
             selenium_enricher.cleanup_temp_profile()
         st.session_state.processing = False
@@ -621,116 +511,15 @@ def display_profile_image(url, width=100):
     """Display profile image from URL"""
     if pd.isna(url) or not url:
         return None
-
+    
     try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             img = Image.open(io.BytesIO(response.content))
             return img
-    except Exception as e:
-        logger.debug(f"Failed to load profile image: {e}")
+    except:
+        pass
     return None
-
-
-def is_placeholder_title(title: str, item_id: str) -> bool:
-    """Check if title is a placeholder (just contains the item ID)."""
-    if not title or not item_id:
-        return True
-    # Placeholder pattern: "Item {item_id}" or just the item_id
-    title_str = str(title).strip()
-    item_id_str = str(item_id).strip()
-    return (
-        title_str == f"Item {item_id_str}" or
-        title_str == item_id_str or
-        title_str.lower() == 'untitled' or
-        title_str == 'N/A'
-    )
-
-def format_display_title(title: str, item_id: str) -> str:
-    """Format title for display, handling placeholders gracefully."""
-    if is_placeholder_title(title, item_id):
-        # Show truncated ID with indicator
-        short_id = str(item_id)[-8:] if len(str(item_id)) > 8 else str(item_id)
-        return f"📦 Listing ...{short_id}"
-    return str(title)[:60]
-
-def format_display_price(price) -> str:
-    """Format price for display, handling 'See on Facebook' and other edge cases."""
-    if pd.isna(price) or price in ['', None, 'N/A']:
-        return "💰 Price on FB"
-    price_str = str(price).strip()
-    if price_str.lower() == 'see on facebook':
-        return "💰 Price on FB"
-    if price_str.startswith('$'):
-        return price_str
-    try:
-        return f"${float(price_str):,.0f}"
-    except (ValueError, TypeError):
-        return price_str
-
-
-def render_listing_card(row: pd.Series):
-    """
-    Render a single marketplace listing as a visual card.
-    Used in the Marketplace tab for grid display.
-    """
-    item_id = row.get('item_id', row.get('id', 'N/A'))
-    raw_title = str(row.get('title', 'Untitled'))
-    title = format_display_title(raw_title, item_id)
-    price = row.get('price', 'N/A')
-    status = row.get('status', 'unknown')
-
-    # Status badge colors
-    status_colors = {
-        'available': '🟢',
-        'sold': '🔴',
-        'pending': '🟡',
-        'draft': '⚪',
-    }
-    status_icon = status_colors.get(status, '⚫')
-
-    # Card container
-    with st.container():
-        # Try to show image
-        local_img = row.get('local_image_path') or row.get('local_image_paths')
-        remote_img = row.get('image_url') or row.get('image_urls')
-        image_path = Path(f"marketplace_images/{item_id}.jpg")
-
-        if local_img and Path(str(local_img)).exists():
-            st.image(str(local_img), width="stretch")
-        elif image_path.exists():
-            st.image(str(image_path), width="stretch")
-        elif remote_img:
-            try:
-                st.image(str(remote_img), width="stretch")
-            except Exception as e:
-                logger.debug(f"Failed to load remote image for {item_id}: {e}")
-                st.markdown("📷 *No image*")
-        else:
-            st.markdown("📷 *No image*")
-
-        # Title and status
-        st.markdown(f"**{title}**")
-
-        # Format price display using helper function
-        price_display = format_display_price(price)
-
-        st.markdown(f"{status_icon} {status.title()} | **{price_display}**")
-
-        # Bump info
-        bump_count = row.get('bump_count', 0)
-        days_until = row.get('days_until_next_bump')
-        if pd.notna(bump_count):
-            if pd.notna(days_until) and days_until <= 0:
-                st.caption(f"🔄 Bumps: {int(bump_count)} | **Ready to bump!**")
-            elif pd.notna(days_until):
-                st.caption(f"🔄 Bumps: {int(bump_count)} | {int(days_until)} days until next")
-            else:
-                st.caption(f"🔄 Bumps: {int(bump_count)}")
-
-        # Link to Facebook
-        st.markdown(f"[View on Facebook](https://facebook.com/marketplace/item/{item_id})")
-        st.markdown("---")
 
 
 def main():
@@ -819,34 +608,15 @@ def main():
         processor.init_db(selected_db)
         st.sidebar.success(f"Created new database: {selected_db}")
 
-    # Load data with schema detection
+    # Load data
     df = load_data(selected_db)
+    stats = get_database_stats(df)
 
-    # Detect schema type for adaptive display
-    schema_type, table_name, columns = detect_schema_type(selected_db)
-    logger.debug(f"Sidebar schema detection: {schema_type} ({table_name})")
-
-    # Calculate schema-aware stats
-    stats = get_database_stats(df, schema_type)
-
-    # Sidebar stats - schema-adaptive
+    # Sidebar stats
     st.sidebar.markdown("---")
-
-    if schema_type == 'marketplace':
-        # Marketplace schema stats
-        st.sidebar.success("🛒 **Marketplace Schema**")
-        st.sidebar.metric("Total Records", stats.get('total_records', 0))
-        st.sidebar.metric("Available", stats.get('available', 0))
-        st.sidebar.metric("Sold", stats.get('sold', 0))
-        if stats.get('ready_to_bump', 0) > 0:
-            st.sidebar.metric("Ready to Bump", stats.get('ready_to_bump', 0))
-    else:
-        # Profile schema stats (default)
-        if schema_type == 'profile':
-            st.sidebar.info("👤 **Profile Schema**")
-        st.sidebar.metric("Total Records", stats.get('total_records', 0))
-        st.sidebar.metric("Successful", stats.get('successful', 0))
-        st.sidebar.metric("With Images", stats.get('with_images', 0))
+    st.sidebar.metric("Total Records", stats.get('total_records', 0))
+    st.sidebar.metric("Successful", stats.get('successful', 0))
+    st.sidebar.metric("With Images", stats.get('with_images', 0))
 
     # ========== QUICK ACTIONS (UX Improvement) ==========
     pending_count = stats.get('pending_enrichment', 0)
@@ -975,10 +745,8 @@ def main():
                 except Exception as e:
                     st.warning(f"Provider info unavailable: {e}")
 
-    # Main tabs with session state persistence
-    # Using st.radio for tab navigation to prevent jump-back behavior on rerun
-    # See: https://discuss.streamlit.io/t/st-tabs-how-to-prevent-rerun-and-jumping-back-to-tab-1/30202
-    TAB_LABELS = [
+    # Main tabs
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📤 Upload & Process",
         "📊 View Data",
         "✏️ Edit Records",
@@ -987,38 +755,7 @@ def main():
         "⚙️ Settings",
         "🛒 Marketplace",
         "🔧 API Config"
-    ]
-
-    # Tab navigation using st.radio (maintains state across reruns)
-    def on_tab_change():
-        """Callback when tab changes - logs for debugging per Rule 25"""
-        new_tab = TAB_LABELS.index(st.session_state.tab_selector)
-        old_tab = st.session_state.active_tab
-        if new_tab != old_tab:
-            logger.info(f"TAB CHANGE: {TAB_LABELS[old_tab]} → {TAB_LABELS[new_tab]}")
-            st.session_state.active_tab = new_tab
-
-    # Use st.radio styled as tabs for persistence
-    selected_tab_label = st.radio(
-        "Navigation",
-        TAB_LABELS,
-        index=st.session_state.active_tab,
-        horizontal=True,
-        key="tab_selector",
-        on_change=on_tab_change,
-        label_visibility="collapsed"
-    )
-
-    # Update active_tab from selection (in case callback didn't fire)
-    current_tab_index = TAB_LABELS.index(selected_tab_label)
-    if current_tab_index != st.session_state.active_tab:
-        logger.debug(f"Syncing active_tab to {current_tab_index}")
-        st.session_state.active_tab = current_tab_index
-
-    st.markdown("---")  # Visual separator after tabs
-
-    # Create placeholder containers for each tab (conditional rendering)
-    # This replaces st.tabs() with explicit conditional blocks
+    ])
 
     # ========== MARKETPLACE AUTO-ACTIONS ==========
     # Handle FB detection flag
@@ -1104,7 +841,7 @@ def main():
         """)
 
     # ========== TAB 1: Upload & Process ==========
-    if current_tab_index == 0:
+    with tab1:
         logger.debug("Rendering TAB 1: Upload & Process")
         st.header("Upload & Process Facebook Profile URLs")
 
@@ -1305,7 +1042,7 @@ def main():
             st.warning("⏳ Processing in progress...")
 
     # ========== TAB 2: View Data ==========
-    if current_tab_index == 1:
+    with tab2:
         logger.debug("Rendering TAB 2: View Data")
         st.header("View Profile Data")
 
@@ -1416,8 +1153,7 @@ def main():
                         st.markdown("**Profile Picture:**")
                         try:
                             st.image(record['browser_profile_pic_url'], width=200)
-                        except Exception as e:
-                            logger.debug(f"Profile image load failed: {e}")
+                        except:
                             st.text("Image unavailable")
 
                 with col2:
@@ -1427,7 +1163,7 @@ def main():
                             st.text(f"{col}: {record[col]}")
 
     # ========== TAB 3: Edit Records ==========
-    if current_tab_index == 2:
+    with tab3:
         logger.debug("Rendering TAB 3: Edit Records")
         st.header("Edit & Delete Records")
 
@@ -1452,8 +1188,7 @@ def main():
                 if pd.notna(record.get('browser_profile_pic_url')):
                     try:
                         st.image(record['browser_profile_pic_url'], width=150)
-                    except Exception as e:
-                        logger.debug(f"Profile image load failed: {e}")
+                    except:
                         st.text("Image unavailable")
 
             with col2:
@@ -1533,7 +1268,7 @@ def main():
                     st.error("❌ Failed to delete record")
 
     # ========== TAB 4: Analytics ==========
-    if current_tab_index == 3:
+    with tab4:
         logger.debug("Rendering TAB 4: Analytics")
         st.header("Analytics & Insights")
 
@@ -1578,7 +1313,7 @@ def main():
                     st.line_chart(timeline_counts)
 
     # ========== TAB 5: Export ==========
-    if current_tab_index == 4:
+    with tab5:
         logger.debug("Rendering TAB 5: Export")
         st.header("Export Data")
 
@@ -1758,50 +1493,10 @@ Image Sources:
                     mime="application/zip"
                 )
 
-    # ========== TAB 6: Settings & API Config ==========
-    if current_tab_index == 5:
-        logger.debug("Rendering TAB 6: Settings & API Config")
-        st.header("⚙️ Settings & API Configuration")
-
-        # =================================================================
-        # UNIFIED BLOCKING BANNER (per ChatGPT UX directive)
-        # Single, deduplicated status message at top
-        # =================================================================
-        current_token = marketplace_scraper.get_access_token()
-        current_catalog = marketplace_scraper.get_catalog_id()
-        api = marketplace_scraper.get_facebook_api()
-        api_status = api.get_api_status()
-
-        blocking_issues = []
-        if not current_token:
-            blocking_issues.append(("TOKEN_MISSING", "Access token not configured"))
-        elif not api_status.get('api_available', False):
-            blocking_issues.append(("TOKEN_INVALID", "Token validation failed"))
-
-        if current_token and api_status.get('api_available') and not current_catalog:
-            blocking_issues.append(("CATALOG_MISSING", "Catalog ID not configured"))
-        elif current_token and api_status.get('api_available') and current_catalog and not api_status.get('catalog_available'):
-            blocking_issues.append(("CATALOG_INVALID", "Catalog access failed"))
-
-        # Display single blocking banner
-        if blocking_issues:
-            primary_issue = blocking_issues[0]
-            remaining = len(blocking_issues) - 1
-
-            if primary_issue[0] in ("TOKEN_MISSING", "TOKEN_INVALID"):
-                st.error(f"🚫 **Operations Blocked:** {primary_issue[1]}" +
-                        (f" (+{remaining} more)" if remaining > 0 else "") +
-                        " — Configure below to enable API access")
-            else:
-                st.warning(f"⚠️ **Limited Mode:** {primary_issue[1]}" +
-                          (f" (+{remaining} more)" if remaining > 0 else ""))
-
-            logger.info(f"API Config blocking issues: {[b[0] for b in blocking_issues]}")
-        else:
-            st.success("✅ **API Ready** — All systems operational")
-            logger.info("API Config: All checks passed")
-
-        st.markdown("---")
+    # ========== TAB 6: Settings ==========
+    with tab6:
+        logger.debug("Rendering TAB 6: Settings")
+        st.header("⚙️ Settings & Configuration")
 
         # Get API readiness status
         api_ready = st.session_state.get('api_ready', False)
@@ -2207,7 +1902,7 @@ export FACEBOOK_ACCESS_TOKEN=your_token
             """)
 
     # ========== TAB 7: Marketplace ==========
-    if current_tab_index == 6:
+    with tab7:
         logger.debug("Rendering TAB 7: Marketplace")
         st.header("🛒 My Marketplace Listings")
 
@@ -2278,127 +1973,62 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                     st.session_state.run_marketplace_scan = True
                     st.rerun()
             else:
-                # Create DataFrame from items for stats
-                items_df = pd.DataFrame(items)
-
-                # Metrics row (matching dashboard.py)
-                mp_stats = get_database_stats(items_df, 'marketplace')
-                col1, col2, col3, col4, col5 = st.columns(5)
-                col1.metric("Total", mp_stats.get('total_records', 0))
-                col2.metric("Available", mp_stats.get('available', 0))
-                col3.metric("Sold", mp_stats.get('sold', 0))
-                col4.metric("Drafts", mp_stats.get('draft', 0))
-                col5.metric("With Prices", mp_stats.get('with_price', 0))
-
-                st.markdown("---")
-
-                # Display listings header
+                # Display listings
                 st.subheader(f"📦 Your {len(items)} Listings")
 
                 # View mode toggle
                 view_mode = st.radio("View", ["📋 Table", "🃏 Cards"], horizontal=True, label_visibility="collapsed")
 
-                # Filter options - search filters immediately as user types
+                # Filter options
                 col1, col2 = st.columns(2)
                 with col1:
-                    search = st.text_input("🔍 Search", placeholder="Type to filter by title...", key="mp_search", label_visibility="collapsed")
+                    search = st.text_input("🔍 Search", placeholder="Filter by title...")
                 with col2:
-                    sort_by = st.selectbox("Sort by", ["Newest", "Price (Low)", "Price (High)", "Title"], key="mp_sort")
+                    sort_by = st.selectbox("Sort by", ["Newest", "Price (Low)", "Price (High)", "Title"])
 
-                # Apply search filter
+                # Create DataFrame from items
+                items_df = pd.DataFrame(items)
+
+                # Filter
                 if search and not items_df.empty:
                     items_df = items_df[items_df['title'].str.contains(search, case=False, na=False)]
 
-                # Apply sorting (RESTORED)
-                if not items_df.empty and sort_by:
-                    if sort_by == "Newest" and 'created_at' in items_df.columns:
-                        items_df = items_df.sort_values('created_at', ascending=False)
-                    elif sort_by == "Price (Low)" and 'price' in items_df.columns:
-                        # Extract numeric price for sorting
-                        items_df['_price_num'] = items_df['price'].str.extract(r'(\d+\.?\d*)').astype(float)
-                        items_df = items_df.sort_values('_price_num', ascending=True)
-                    elif sort_by == "Price (High)" and 'price' in items_df.columns:
-                        items_df['_price_num'] = items_df['price'].str.extract(r'(\d+\.?\d*)').astype(float)
-                        items_df = items_df.sort_values('_price_num', ascending=False)
-                    elif sort_by == "Title" and 'title' in items_df.columns:
-                        items_df = items_df.sort_values('title', ascending=True)
-
-                st.info(f"Showing {len(items_df)} of {len(items)} listings")
-
                 if view_mode == "📋 Table":
-                    # TABLE VIEW - with row selection and detailed listing panel
+                    # TABLE VIEW - like profiles
                     if not items_df.empty:
                         # Select columns to display
-                        display_cols = ['item_id', 'title', 'price', 'status', 'bump_count', 'days_until_next_bump']
+                        display_cols = ['item_id', 'title', 'price', 'status', 'bump_count', 'days_until_next_bump', 'item_url']
                         available_cols = [c for c in display_cols if c in items_df.columns]
-
-                        # Enable row selection - clicking a row selects it
-                        selection_event = st.dataframe(
-                            items_df[available_cols],
-                            width="stretch",
-                            height=400,
-                            hide_index=True,
-                            on_select="rerun",
-                            selection_mode="single-row",
-                            key="mp_table_selection"
-                        )
+                        st.dataframe(items_df[available_cols], width="stretch", height=400)
 
                         # Detailed view for selected item
                         st.markdown("---")
                         st.subheader("📄 Listing Details")
 
-                        # Get selected row from dataframe click, or use selectbox as fallback
-                        selected_rows = selection_event.selection.rows if selection_event.selection.rows else []
-
-                        # Build lookup dict for format_func: item_id -> display string with title
-                        id_to_title = {
-                            row['item_id']: f"{format_display_title(row.get('title', ''), row['item_id'])} ({row['item_id']})"
-                            for _, row in items_df.iterrows()
-                        }
-
-                        # If row clicked in table, use that; otherwise show selectbox
-                        if selected_rows:
-                            selected_id = items_df.iloc[selected_rows[0]]['item_id']
-                            st.caption(f"📍 Selected from table: {id_to_title.get(selected_id, selected_id)}")
-                        else:
-                            selected_id = st.selectbox(
-                                "Select Listing",
-                                items_df['item_id'].tolist(),
-                                format_func=lambda x: id_to_title.get(x, str(x)),
-                                key="mp_selected_item"
-                            )
+                        selected_id = st.selectbox("Select Listing", items_df['item_id'].tolist())
                         if selected_id:
                             item = items_df[items_df['item_id'] == selected_id].iloc[0].to_dict()
 
                             col1, col2 = st.columns([1, 2])
                             with col1:
-                                # Show image (RESTORED)
+                                # Show image
                                 local_img = item.get('local_image_path') or item.get('local_image_paths')
                                 remote_img = item.get('image_url') or item.get('image_urls')
-                                # Also check marketplace_images folder
-                                mp_img = Path(f"marketplace_images/{item.get('item_id', '')}.jpg")
-
                                 if local_img and Path(str(local_img)).exists():
                                     st.image(local_img, width="stretch")
-                                elif mp_img.exists():
-                                    st.image(str(mp_img), width="stretch")
                                 elif remote_img:
                                     try:
                                         st.image(remote_img, width="stretch")
-                                    except Exception as e:
-                                        logger.debug(f"Remote image load failed: {e}")
+                                    except:
                                         st.info("📷 No image")
                                 else:
                                     st.info("📷 No image available")
 
                             with col2:
-                                # Use helper functions for consistent display
-                                display_title = format_display_title(item.get('title', ''), item.get('item_id', ''))
-                                display_price = format_display_price(item.get('price'))
-                                st.markdown(f"**Title:** {display_title}")
-                                st.markdown(f"**Price:** {display_price}")
+                                st.markdown(f"**Title:** {item.get('title', 'N/A')}")
+                                st.markdown(f"**Price:** {item.get('price', 'N/A')}")
 
-                                # Status with badge (RESTORED)
+                                # Status with badge
                                 status = item.get('status', 'available')
                                 status_badges = {
                                     'available': '🟢 Available',
@@ -2408,18 +2038,14 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                                 }
                                 st.markdown(f"**Status:** {status_badges.get(status, status)}")
 
-                                # Bump info (RESTORED) - Fixed NaN handling per Rule 43
+                                # Bump info
                                 bump_count = item.get('bump_count', 0)
                                 max_bumps = item.get('max_bump_count', 5)
                                 days_next = item.get('days_until_next_bump')
                                 if bump_count is not None:
                                     bump_text = f"{bump_count}/{max_bumps} bumps used"
-                                    # Use pd.notna() to properly check for NaN values
-                                    if pd.notna(days_next):
-                                        if days_next <= 0:
-                                            bump_text += " (**Ready to bump!**)"
-                                        else:
-                                            bump_text += f" (next in {int(days_next)} days)"
+                                    if days_next is not None:
+                                        bump_text += f" (next in {days_next} days)"
                                     st.markdown(f"**Bumps:** {bump_text}")
 
                                 st.markdown(f"**Item ID:** {item.get('item_id', 'N/A')}")
@@ -2428,19 +2054,36 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                     else:
                         st.info("No listings match your search")
                 else:
-                    # CARDS VIEW - Visual grid with thumbnails using render_listing_card
-                    if items_df.empty:
-                        st.info("No listings match your search")
-                    else:
-                        # Display as 3-column grid using render_listing_card
-                        cols_per_row = 3
-                        for i in range(0, len(items_df), cols_per_row):
-                            cols = st.columns(cols_per_row)
-                            for j, col in enumerate(cols):
-                                if i + j < len(items_df):
-                                    row = items_df.iloc[i + j]
-                                    with col:
-                                        render_listing_card(row)
+                    # CARDS VIEW
+                    filtered = items_df.to_dict('records') if not items_df.empty else []
+                    cols = st.columns(3)
+                    for idx, item in enumerate(filtered):
+                        with cols[idx % 3]:
+                            with st.container(border=True):
+                                local_img = item.get('local_image_path') or item.get('local_image_paths')
+                                remote_img = item.get('image_url') or item.get('image_urls')
+
+                                if local_img and Path(str(local_img)).exists():
+                                    st.image(local_img, width="stretch")
+                                elif remote_img:
+                                    try:
+                                        st.image(remote_img, width="stretch")
+                                    except:
+                                        pass
+
+                                title = item.get('title', 'Untitled')
+                                price = item.get('price', 'N/A')
+                                item_url = item.get('item_url', '')
+                                status = item.get('status', 'available')
+
+                                # Status badge
+                                status_icons = {'available': '🟢', 'pending': '🟡', 'sold': '🔴', 'draft': '⚪'}
+                                status_icon = status_icons.get(status, '⚪')
+
+                                st.markdown(f"**{title[:50]}**")
+                                st.markdown(f"💵 {price} {status_icon}")
+                                if item_url:
+                                    st.link_button("View", item_url, width="stretch")
 
                 # Export option
                 st.markdown("---")
@@ -2454,7 +2097,7 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                     )
 
     # ========== TAB 8: API Config ==========
-    if current_tab_index == 7:
+    with tab8:
         logger.debug("Rendering TAB 8: API Config")
         st.header("🔧 Facebook Commerce API")
 

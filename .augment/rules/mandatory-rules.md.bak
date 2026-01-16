@@ -179,24 +179,33 @@ Explicit constraints override all defaults and best practices.
 Constraints persist until revoked.
 
 ============================================================
-RULE 11 — ORM Safety 🟠
+RULE 11 — SQLite Database Safety 🟠
 ============================================================
 
-Reserved names forbidden.
-DB initialization must be tested immediately.
+For SQLite database operations:
+- Reserved SQL keywords forbidden as column names
+- Database schema must match project specification exactly
+- DB initialization must be tested immediately after creation
+- Use proper transactions for batch operations
+- Verify table creation with PRAGMA table_info queries
 
 ============================================================
-RULE 12 — Docker Configuration 🟠
+RULE 12 — HTTP Request Safety 🟠
 ============================================================
 
-All env vars required.
-Connectivity must be verified.
+For HTTP requests (requests library or urllib):
+- Always set timeout values (default: 15 seconds)
+- Implement rate limiting (1 req/sec for this project)
+- Handle connection errors, timeouts, and HTTP errors separately
+- Respect robots.txt and ethical scraping practices
+- Never assume authentication will work without evidence
 
 ============================================================
 RULE 13 — Python Version Compatibility 🟡
 ============================================================
 
-Use Python 3.11 or 3.12 only.
+Use Python 3.8+ compatible syntax.
+Prefer stdlib over external dependencies where possible.
 
 ============================================================
 RULE 14 — Database Alignment 🟡
@@ -232,11 +241,15 @@ RULE 18 — Feature Removal Prohibition 🔴
 No feature removal without explicit permission.
 
 ============================================================
-RULE 19 — OCR Data Handling 🟡
+RULE 19 — HTML Metadata Extraction 🟡
 ============================================================
 
-Never auto-delete OCR noise.
-Provide cleanup tools only.
+When extracting metadata from HTML:
+- Parse OpenGraph tags (og:title, og:description, og:image)
+- Extract page title from <title> tag
+- Handle malformed HTML gracefully
+- Unescape HTML entities properly
+- Never assume metadata exists without verification
 
 ============================================================
 RULE 20 — UI State Preservation 🟡
@@ -275,126 +288,80 @@ Never push broken code.
 All tests must pass with evidence.
 
 ============================================================
-RULE 25 — Comprehensive Application Logging 🔴
+RULE 25 — Logging Requirements 🟠
 ============================================================
 
-**ALL production code MUST have comprehensive logging for troubleshooting.**
-See mandatory-rules-v5.7.md for full logging configuration requirements.
+For Python scripts:
+- Use logging module, not print statements for production code
+- Log to both console and file when appropriate
+- Include timestamps and log levels
+- Log progress indicators for batch operations
 
-**REQUIRED:** Log to BOTH console AND file (/tmp/app.log).
-
-============================================================
-RULE 25A — Mandatory Log File Review 🔴
-============================================================
-
-**When troubleshooting ANY problem, LLM MUST review existing log data FIRST.**
-
-**REQUIRED before ANY fix attempt:**
-```bash
-$ cat /tmp/app.log | tail -100
-$ read-terminal
-```
-
-**FORBIDDEN:**
-- Making diagnoses without reviewing logs
-- Speculation when log data is available
-- "I think the problem is..." without log evidence
-
-See mandatory-rules-v5.7.md for complete log review workflow.
+For React components:
+- Console errors must be visible in browser DevTools
+- User-facing errors must appear in UI notifications
 
 ============================================================
-RULE 26 — Use Existing Browser Window 🟠
+RULE 26 — CORS Awareness for React 🟠
 ============================================================
 
-Use xdotool + xprop command exactly as specified.
-No new browser instances if existing window exists.
+When building React components that fetch external URLs:
+- Acknowledge CORS limitations upfront
+- Never claim direct fetching will work without backend proxy
+- Provide clear error messages about browser security restrictions
+- Document that Python script is the production solution
 
 ============================================================
-RULE 27 — Screenshot Claims Require OCR (CRITICAL) 🔴
+RULE 27 — URL Transformation Accuracy 🔴
 ============================================================
 
-**NEVER make claims about what a screenshot shows without:**
+When transforming Facebook URLs:
+- Use regex pattern matching for marketplace URLs
+- Extract profile ID correctly from URL structure
+- Validate transformed URLs before HTTP requests
+- Handle edge cases (missing IDs, malformed URLs)
+- Never assume URL structure without verification
 
-1. ✅ **SCROLL to target elements** - Use `scrollIntoView()` to ensure elements are visible
-2. ✅ **VERIFY elements are displayed** - Check `is_displayed()` returns True
-3. ✅ **Take screenshot AFTER scrolling** - Don't screenshot before elements are visible
-4. ✅ **Run OCR on the screenshot** - Use Tesseract or PaddleOCR
-5. ✅ **Show FULL OCR output** - Don't summarize, show complete text
-6. ✅ **Display screenshot to user** - Use `code /tmp/screenshot.png` in VSCode
-7. ✅ **Base claims ONLY on OCR text** - Not on assumptions or guesses
-
-**Forbidden phrases without OCR evidence:**
-- ❌ "I can see..."
-- ❌ "The screenshot shows..."
-- ❌ "Looking at the screenshot..."
-- ❌ "The fix appears to be working..."
-- ❌ "The problem is fixed..."
-- ❌ "The buttons are visible..." (without OCR proof)
-
-**Required pattern for Selenium + OCR:**
+**Required pattern:**
 ```python
-# 1. Find target element by data-testid or aria-label
-target = driver.find_element(By.CSS_SELECTOR, "[data-testid='target-element']")
+import re
 
-# 2. SCROLL to make element visible
-driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target)
-time.sleep(1)
-
-# 3. VERIFY element is displayed
-assert target.is_displayed(), "Element not visible after scrolling!"
-
-# 4. Take screenshot
-driver.save_screenshot("/tmp/screenshot.png")
-
-# 5. Run OCR
-import pytesseract
-from PIL import Image
-img = Image.open('/tmp/screenshot.png')
-text = pytesseract.image_to_string(img)
-print("=== FULL OCR OUTPUT ===")
-print(text)
-
-# 6. Display screenshot to user
-# (In VSCode: code /tmp/screenshot.png)
-
-# 7. Make claims based ONLY on OCR output
-if "Expected Text" in text:
-    print("✅ Found 'Expected Text' in OCR output")
-else:
-    print("❌ 'Expected Text' NOT found in OCR output")
+def transform_url(marketplace_url):
+    # Extract ID from marketplace/profile/{ID}/?params
+    pattern = r'facebook\.com/marketplace/profile/(\d+)'
+    match = re.search(pattern, marketplace_url)
+    if match:
+        profile_id = match.group(1)
+        return f'https://www.facebook.com/{profile_id}'
+    return None
 ```
 
-**Why this rule exists:**
-- Prevents claiming buttons are visible when they're below the fold
-- Prevents running OCR on screenshots that don't show target elements
-- Prevents false negatives (element exists but not in screenshot)
-- Ensures reproducible verification
-
 ============================================================
-RULE 28 — Application Parameters Database 🟠
+RULE 28 — Database Schema Compliance 🟠
 ============================================================
 
-Read and quote parameters before use.
-No guessing.
+Database schema must match project specification exactly.
+No silent column additions or renames.
+Verify schema with PRAGMA queries after creation.
 
 ============================================================
-RULE 29 — Terminal Output Capture & Process Management 🔴
+RULE 29 — Terminal Output Capture 🟠
 ============================================================
 
-**CRITICAL: Terminal timeouts do NOT mean command failed.**
+Use heredoc format exclusively.
+Monitor session count.
 
-When `launch-process` times out:
-1. ✅ Use `read-terminal` to check actual output
-2. ❌ Do NOT assume command failed
-3. ❌ Do NOT launch new process without reading terminal
+**For long-running processes (servers, watchers, continuous processes):**
+- FORBIDDEN: `wait=true` with long timeouts (blocks user's terminal and kills process on timeout)
+- FORBIDDEN: `wait=false` (creates inaccessible headless terminals)
+- REQUIRED: Ask user to start process manually in their VSCode terminal
+- REQUIRED: Use `read-terminal` to observe output from user's terminal
+- User and assistant must both have access to the same visible terminal
 
-**For long-running processes (servers, streamlit, etc.):**
-- ❌ FORBIDDEN: `wait=true` with long timeouts
-- ❌ FORBIDDEN: `wait=false` (creates inaccessible terminals)
-- ✅ REQUIRED: Ask user to start in their terminal
-- ✅ REQUIRED: Use `read-terminal` to observe
-
-See mandatory-rules-v5.7.md for complete terminal management guidance.
+**For short commands (queries, one-time operations):**
+- Use `wait=true` with appropriate short timeout
+- Use `read-terminal` to verify results
+- Never claim success/failure without reading terminal output
 
 ============================================================
 RULE 30 — Project Dependencies 🟡
