@@ -300,23 +300,42 @@
             </div>
         </div>
 
+        <!-- Installation Method Selector -->
+        <div id="method-selector" class="card">
+            <h2 style="margin-bottom: 1rem; color: #667eea;">🔧 Choose Installation Method</h2>
+
+            <div class="feature-list" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <button class="btn" onclick="selectMethod('docker')" id="btn-docker" style="flex: 1; min-width: 200px;">
+                    🐳 Docker (Recommended)
+                </button>
+                <button class="btn btn-secondary" onclick="selectMethod('python')" id="btn-python" style="flex: 1; min-width: 200px;">
+                    🐍 Manual Python
+                </button>
+            </div>
+
+            <div class="alert alert-info" style="margin-top: 1rem;">
+                <strong>Docker:</strong> Easiest setup, includes all dependencies<br>
+                <strong>Manual Python:</strong> For developers who prefer direct Python installation
+            </div>
+        </div>
+
         <!-- Installation Steps -->
         <div id="setup-container" class="card hidden">
             <h2 style="margin-bottom: 1rem; color: #667eea;">📦 Setup Instructions</h2>
-            
+
             <div class="progress-bar">
                 <div id="progress" class="progress-fill"></div>
             </div>
 
-            <!-- Step 1: Install Docker -->
+            <!-- Step 1: Install Docker (Docker method) -->
             <div id="step-install" class="setup-step active">
                 <div class="step-number">1</div>
-                <div class="step-title">Install Docker</div>
-                <div class="step-description">
+                <div class="step-title" id="step1-title">Install Docker</div>
+                <div class="step-description" id="step1-desc">
                     Docker is required to run FB Profile Processor. Choose your platform:
                 </div>
-                
-                <div class="feature-list">
+
+                <div id="docker-install-options" class="feature-list">
                     <a href="https://docs.docker.com/desktop/install/mac-install/" target="_blank" class="btn btn-secondary">
                         🍎 macOS
                     </a>
@@ -328,11 +347,17 @@
                     </a>
                 </div>
 
-                <div class="alert alert-info">
+                <div id="python-install-options" class="hidden">
+                    <div class="alert alert-warning">
+                        <strong>Requirements:</strong> Python 3.8+ and pip must be installed
+                    </div>
+                </div>
+
+                <div class="alert alert-info" id="step1-info">
                     After installing Docker, refresh this page to continue.
                 </div>
 
-                <button class="btn" onclick="recheckDocker()">🔄 I've Installed Docker - Recheck</button>
+                <button class="btn" onclick="recheckDocker()" id="step1-btn">🔄 I've Installed Docker - Recheck</button>
             </div>
 
             <!-- Step 2: Clone Repository -->
@@ -356,17 +381,36 @@ cd fb-profile-processor</code>
             <div id="step-start" class="setup-step hidden">
                 <div class="step-number">3</div>
                 <div class="step-title">Start Application</div>
-                <div class="step-description">
+                <div class="step-description" id="step3-desc">
                     From inside the fb-profile-processor directory, run:
                 </div>
-                
-                <div class="code-box">
-                    <button class="copy-btn" onclick="copyCode('start-code')">📋 Copy</button>
-                    <code id="start-code">docker-compose up -d</code>
+
+                <!-- Docker method -->
+                <div id="docker-start-commands">
+                    <div class="code-box">
+                        <button class="copy-btn" onclick="copyCode('start-code-docker')">📋 Copy</button>
+                        <code id="start-code-docker">./install.sh</code>
+                    </div>
+
+                    <div class="alert alert-info" style="margin-top: 0.5rem;">
+                        <strong>Alternative:</strong> You can also run <code>docker-compose up -d</code> directly
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <strong>⏱️ First Time Setup:</strong> The first run will download Docker images (~500MB). This may take 5-10 minutes depending on your internet connection.
+                    </div>
                 </div>
 
-                <div class="alert alert-warning">
-                    <strong>⏱️ First Time Setup:</strong> The first run will download Docker images (~500MB). This may take 5-10 minutes depending on your internet connection.
+                <!-- Python method -->
+                <div id="python-start-commands" class="hidden">
+                    <div class="code-box">
+                        <button class="copy-btn" onclick="copyCode('start-code-python')">📋 Copy</button>
+                        <code id="start-code-python">pip install -r requirements.txt && streamlit run dashboard.py</code>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>💡 Tip:</strong> Use a virtual environment: <code>python -m venv venv && source venv/bin/activate</code>
+                    </div>
                 </div>
 
                 <button class="btn" onclick="checkApplication()">🔄 Check if Running</button>
@@ -452,6 +496,47 @@ docker-compose down</code>
         let currentStep = 0;
         let dockerInstalled = false;
         let appRunning = false;
+        let installMethod = 'docker'; // 'docker' or 'python'
+
+        // Select installation method
+        function selectMethod(method) {
+            installMethod = method;
+
+            // Update button styles
+            document.getElementById('btn-docker').className = method === 'docker' ? 'btn' : 'btn btn-secondary';
+            document.getElementById('btn-python').className = method === 'python' ? 'btn' : 'btn btn-secondary';
+
+            // Show/hide method-specific content
+            const dockerInstallOptions = document.getElementById('docker-install-options');
+            const pythonInstallOptions = document.getElementById('python-install-options');
+            const dockerStartCommands = document.getElementById('docker-start-commands');
+            const pythonStartCommands = document.getElementById('python-start-commands');
+
+            if (method === 'docker') {
+                dockerInstallOptions.classList.remove('hidden');
+                pythonInstallOptions.classList.add('hidden');
+                dockerStartCommands.classList.remove('hidden');
+                pythonStartCommands.classList.add('hidden');
+
+                document.getElementById('step1-title').textContent = 'Install Docker';
+                document.getElementById('step1-desc').textContent = 'Docker is required to run FB Profile Processor. Choose your platform:';
+                document.getElementById('step1-info').textContent = 'After installing Docker, refresh this page to continue.';
+                document.getElementById('step1-btn').textContent = '🔄 I\'ve Installed Docker - Recheck';
+            } else {
+                dockerInstallOptions.classList.add('hidden');
+                pythonInstallOptions.classList.remove('hidden');
+                dockerStartCommands.classList.add('hidden');
+                pythonStartCommands.classList.remove('hidden');
+
+                document.getElementById('step1-title').textContent = 'Verify Python';
+                document.getElementById('step1-desc').textContent = 'Ensure Python 3.8+ is installed on your system.';
+                document.getElementById('step1-info').innerHTML = 'Run <code>python --version</code> to check your Python version.';
+                document.getElementById('step1-btn').textContent = '✅ Python Ready - Continue';
+            }
+
+            // Show setup container
+            document.getElementById('setup-container').classList.remove('hidden');
+        }
 
         // Check if Docker is installed by trying to reach the app
         async function checkDocker() {
