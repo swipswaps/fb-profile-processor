@@ -2,6 +2,24 @@
 
 A comprehensive Python tool for managing Facebook Marketplace seller profiles and your own marketplace listings. Features a Streamlit dashboard with real-time browser integration.
 
+## ⚡ Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/swipswaps/fb-profile-processor.git
+cd fb-profile-processor
+pip install -r requirements.txt
+
+# Run dashboard
+streamlit run dashboard_integrated.py --server.port 8501 --server.runOnSave=true
+```
+
+**Open:** http://localhost:8501
+
+**Web Demo (no install):** [swipswaps.github.io/fb-profile-processor](https://swipswaps.github.io/fb-profile-processor/) — auto-connects when Streamlit detected!
+
+---
+
 ## 🚀 Project Evolution
 
 This project evolved through several phases:
@@ -39,8 +57,10 @@ This project evolved through several phases:
 ### 🎛️ Streamlit Dashboard (`dashboard_integrated.py`)
 - **Visual profile management** - View, filter, and export seller profiles
 - **My Marketplace** - Scan and track your own Facebook Marketplace listings
+- **Live search** - Filter listings as you type (no Enter key needed!)
 - **Image gallery** - View profile pictures and item images
-- **Export options** - CSV, JSON, ZIP with images
+- **Export (6 formats)** - CSV, JSON, Excel, Text, SQL, ZIP with images
+- **Instant preview** - See export content before downloading (tab-based UI)
 - **Real-time enrichment** - One-click browser enrichment
 
 ### 📋 Profile Collection (`fb_profile_processor.py`)
@@ -115,10 +135,14 @@ pip install -r requirements.txt
 
 **Required packages:**
 - `streamlit` - Dashboard UI
+- `streamlit-keyup` - Live search (filters as you type, no Enter needed)
 - `selenium` - Browser automation
 - `requests` - HTTP requests
 - `pandas` - Data processing
 - `Pillow` - Image handling
+- `openpyxl` - Excel export support
+
+> ⚠️ **Note:** `streamlit-keyup` is required for live search. Without it, search falls back to Enter-based filtering (Streamlit framework limitation).
 
 ### Step 2: Firefox Setup (One-Time)
 
@@ -223,14 +247,22 @@ https://www.facebook.com/marketplace/profile/987654321/?ref=share
 ---
 
 #### Tab 5: 💾 Export
-- **CSV** — Spreadsheet format for Excel/Google Sheets
-- **JSON** — Developer-friendly structured data
-- **ZIP** — Complete package with profile images included
+**6 Export Formats** (with instant preview):
 
-**Export Options:**
-- Export all records or filtered selection
-- Include/exclude specific columns
-- Download directly to browser
+| Format | Use Case |
+|--------|----------|
+| 📊 **CSV** | Spreadsheet (Excel, Google Sheets) |
+| 🔧 **JSON** | Developer APIs, structured data |
+| 📗 **Excel** | Native .xlsx with auto-sized columns |
+| 📄 **Text** | Human-readable formatted output |
+| 🗄️ **SQL** | Database import (INSERT statements) |
+| 📦 **ZIP** | All formats + profile images bundled |
+
+**UX Pattern (receipts-ocr style):**
+- **Tabs** for instant format switching (click tab = see preview)
+- **Preview always visible** (no hidden expanders)
+- **Full content** shown in scrollable area (no truncation)
+- **Download button** above preview for each format
 
 ---
 
@@ -260,9 +292,18 @@ Your personal Facebook Marketplace listing manager.
 - 📋 **Table View** — Spreadsheet with all columns, click row for detail panel
 - 🃏 **Cards View** — Visual cards with images
 
-**Search & Sort:**
-- 🔍 **Search** — Filter listings by title
+**Live Search & Filters:**
+- 🔍 **Live Search** — Filter listings as you type (no Enter needed!)
+- 📋 **Status Filter** — All / Available / Sold / Pending / Draft
 - **Sort by** — Newest, Price (Low/High), Title
+
+> 💡 **Technical Note:** Live search uses `streamlit-keyup` package which fires on every keystroke. Streamlit's native `text_input` requires Enter key - this is a framework limitation, not a bug.
+
+**Export Listings (6 formats):**
+- Same tab-based export UI as Profiles tab
+- CSV, JSON, Excel, Text, SQL, ZIP with images
+- Instant preview visible for each format
+- Table name in SQL: `marketplace_listings`
 
 **Incomplete Data Warning:**
 - Shows if fewer listings found than previous scan
@@ -510,8 +551,14 @@ CREATE TABLE marketplace_items (
 
 ## 🚀 GitHub Pages Setup
 
-The `/docs` folder contains a static HTML demo for URL transformation.
+The `/docs` folder contains a static HTML demo for URL transformation with **auto-connect** to your local Streamlit.
 
+### Features:
+- **URL Transformer** - Convert Facebook profile URLs without installation
+- **Auto-Connect** - Detects when Streamlit is running locally and auto-switches to full dashboard
+- **Streamlit Detection** - Uses iframe probing to detect `localhost:8501`
+
+### Setup:
 1. Go to repository **Settings** → **Pages**
 2. Under **Source**, select:
    - Branch: `main`
@@ -519,27 +566,93 @@ The `/docs` folder contains a static HTML demo for URL transformation.
 3. Click **Save**
 4. Access at: `https://swipswaps.github.io/fb-profile-processor/`
 
+### How Auto-Connect Works:
+1. Open the GitHub Pages URL in your browser
+2. Start Streamlit locally: `streamlit run dashboard_integrated.py --server.port 8501`
+3. The page detects Streamlit and shows: **"Streamlit Detected! Connecting..."**
+4. Automatically switches to the full Streamlit dashboard
+
 ---
 
 ## ⚠️ Troubleshooting
 
-### Tab jumps back to first tab
+### 🔍 Search & Filtering Issues
+
+#### Search requires pressing Enter
+**Cause:** `streamlit-keyup` package not installed (falls back to native `text_input`)
+
+**Fix:**
+```bash
+pip install streamlit-keyup
+```
+
+Then restart Streamlit. Live search should now work (filters as you type).
+
+> ⚠️ **Framework Limitation:** Streamlit's native `st.text_input()` ALWAYS requires Enter. This is not a bug - it's how Streamlit works. The `streamlit-keyup` package is the official workaround.
+
+#### Search returns 0 results
+- Check the search term matches listing titles (case-insensitive)
+- Clear the search box to see all listings
+- Try the Status dropdown filter instead
+
+---
+
+### 📥 Export Issues
+
+#### Excel export fails
+**Cause:** `openpyxl` package not installed
+
+**Fix:**
+```bash
+pip install openpyxl
+```
+
+#### Preview not showing
+- Click the format **tab** (CSV, JSON, etc.) to see preview
+- Preview is always visible below the download button
+- No need to click an expander - tabs switch instantly
+
+#### SQL export wrong table name
+- Profiles export uses table: `facebook_profiles`
+- Marketplace export uses table: `marketplace_listings`
+- This is intentional to keep schemas separate
+
+---
+
+### 🖥️ Dashboard Issues
+
+#### Tab jumps back to first tab
 This issue has been fixed in Phase 5. If you're experiencing this:
 - Update to the latest version of `dashboard_integrated.py`
 - Clear browser cache and refresh
 - The fix uses `st.radio()` with session state instead of `st.tabs()` which has a known Streamlit bug
 
-### Firefox not detected
+#### Module not found: streamlit_keyup
+```bash
+pip install streamlit-keyup
+```
+
+The dashboard has a graceful fallback - search will work but require Enter.
+
+---
+
+### 🦊 Firefox Issues
+
+#### Firefox not detected
 - Ensure Firefox is installed
 - Log into Facebook in Firefox first
 - Close Firefox before running dashboard
 
-### Enrichment fails
+#### Enrichment fails
 - Check Firefox profile exists: `~/.mozilla/firefox/*.default-release`
 - Ensure Facebook session is valid (not expired)
 - Try logging into Facebook again
 
-### Marketplace scan empty
+---
+
+### 🛒 Marketplace Issues
+
+#### Marketplace scan empty
 - Verify you have active listings on Facebook Marketplace
 - Check Firefox is logged into the correct Facebook account
 
