@@ -1638,9 +1638,9 @@ def main():
                     mime="text/csv",
                     key="prof_dl_csv"
                 )
-                # INSTANT PREVIEW - actual CSV text with commas
+                # INSTANT PREVIEW - actual CSV text with commas (monospace for alignment)
                 st.markdown("**Preview (comma-separated values):**")
-                st.text_area("CSV Output", csv_data, height=300, key="prof_csv_preview")
+                st.code(csv_data, language="csv", line_numbers=True)
 
             with tab_json:
                 json_data = create_json_download(export_df)
@@ -1693,9 +1693,9 @@ def main():
                     mime="text/plain",
                     key="prof_dl_sql"
                 )
-                # INSTANT PREVIEW - full SQL, scrollable textarea
+                # INSTANT PREVIEW - full SQL, monospace with syntax highlighting
                 st.markdown("**Preview:**")
-                st.text_area("SQL Output", sql_data, height=300, key="prof_sql_preview")
+                st.code(sql_data, language="sql", line_numbers=True)
 
             with tab_zip:
                 st.markdown("**ZIP includes all formats + profile images**")
@@ -2550,9 +2550,9 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="text/csv",
                             key="mp_dl_csv"
                         )
-                        # INSTANT PREVIEW - actual CSV text with commas (not dataframe)
+                        # INSTANT PREVIEW - actual CSV text with commas (monospace for alignment)
                         st.markdown("**Preview (comma-separated values):**")
-                        st.text_area("CSV Output", csv_data, height=300, key="mp_csv_preview")
+                        st.code(csv_data, language="csv", line_numbers=True)
 
                     with tab_json:
                         json_data = create_json_download(items_df)
@@ -2604,9 +2604,9 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="text/plain",
                             key="mp_dl_sql"
                         )
-                        # INSTANT PREVIEW - full SQL, scrollable textarea
+                        # INSTANT PREVIEW - full SQL, monospace with syntax highlighting
                         st.markdown("**Preview:**")
-                        st.text_area("SQL Output", sql_data, height=300, key="mp_sql_preview")
+                        st.code(sql_data, language="sql", line_numbers=True)
 
                     with tab_zip:
                         st.markdown("**ZIP includes all formats + images**")
