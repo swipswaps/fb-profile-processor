@@ -16,6 +16,7 @@ import re
 import json
 import logging
 import requests
+from enum import Enum
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
@@ -62,19 +63,20 @@ if not logger.handlers:
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
     logger.addHandler(file_handler)
 
-logger.info("=" * 60)
-logger.info("MARKETPLACE_SCRAPER MODULE LOADED")
-logger.info(f"Graph API Version: {GRAPH_API_VERSION if 'GRAPH_API_VERSION' in dir() else 'loading...'}")
-logger.info("=" * 60)
-
 # =============================================================================
-# CONSTANTS
+# CONSTANTS (defined before logging to avoid F821)
 # =============================================================================
 
 GRAPH_API_VERSION = "v20.0"
 GRAPH_API_RELEASE_DATE = "2024-05-28"  # v20.0 release date
 GRAPH_API_DEPRECATION_MONTHS = 24  # Meta deprecates versions ~2 years after release
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
+
+# Now log module load with defined constants
+logger.info("=" * 60)
+logger.info("MARKETPLACE_SCRAPER MODULE LOADED")
+logger.info(f"Graph API Version: {GRAPH_API_VERSION}")
+logger.info("=" * 60)
 
 
 def get_api_version_status() -> dict:
@@ -105,6 +107,534 @@ def get_api_version_status() -> dict:
         "months_since_release": months_since_release,
         "months_until_deprecation": max(0, months_until_deprecation),
         "warning": warning,
+    }
+
+
+# =============================================================================
+# CANONICAL FACEBOOK API STATE MACHINE
+# =============================================================================
+# All UI components, buttons, and features MUST derive from this state.
+# No guessing. No hidden assumptions. State drives everything.
+#
+# Reference: Meta Commerce Platform docs, facebook-python-business-sdk patterns
+# Source: https://developers.facebook.com/docs/commerce-platform/api-setup/
+
+
+class FacebookAPIState(Enum):
+    """
+    Canonical state machine for Facebook API configuration.
+
+    Every screen, button, and feature MUST derive from this state.
+    No guessing. No hidden assumptions. Explicit state transitions only.
+
+    State Progression:
+        NO_CONFIG → TOKEN_PRESENT → TOKEN_VALID → PERMISSIONS_VALID →
+        CATALOG_ACCESSIBLE → COMMERCE_LINKED → API_READY
+
+    Special States:
+        OFFLINE - No credentials, diagnostic mode only
+        DEGRADED - Partial functionality (e.g., human token)
+        BLOCKED - Hard stop condition detected
+        ERROR - API error during state check
+    """
+
+    # === Configuration States (progressive) ===
+    NO_CONFIG = 0           # No credentials configured at all
+    TOKEN_PRESENT = 10      # Token exists but not validated
+    TOKEN_VALID = 20        # Token passes /debug_token validation
+    PERMISSIONS_VALID = 30  # Required scopes (catalog_management, business_management) granted
+    CATALOG_ACCESSIBLE = 40 # GET /{catalog_id} returns 200
+    COMMERCE_LINKED = 50    # Catalog linked to Commerce Account
+    API_READY = 100         # All requirements met - full functionality
+
+    # === Special States ===
+    OFFLINE = -10           # No credentials, diagnostic mode
+    DEGRADED = -5           # Partial functionality (human token, expiring soon)
+    BLOCKED = -100          # Hard stop (invalid token, missing critical permissions)
+    ERROR = -50             # Error during state determination
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
+
+    def __le__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value <= other.value
+        return NotImplemented
+
+    def __gt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value > other.value
+        return NotImplemented
+
+    def __ge__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value >= other.value
+        return NotImplemented
+
+
+# State metadata for UI display and guidance
+API_STATE_METADATA = {
+    FacebookAPIState.NO_CONFIG: {
+        "label": "No Configuration",
+        "description": "No Facebook API credentials configured.",
+        "icon": "⚪",
+        "color": "gray",
+        "next_step": "Add FB_ACCESS_TOKEN and FB_CATALOG_ID to your configuration.",
+        "fix_url": "https://developers.facebook.com/docs/development/register/",
+        "blocked_features": ["all"],
+    },
+    FacebookAPIState.TOKEN_PRESENT: {
+        "label": "Token Present (Unverified)",
+        "description": "Access token provided but not yet validated.",
+        "icon": "🟡",
+        "color": "yellow",
+        "next_step": "Click 'Verify Token' to validate with Meta API.",
+        "fix_url": "https://developers.facebook.com/tools/accesstoken/",
+        "blocked_features": ["write_operations", "catalog_operations"],
+    },
+    FacebookAPIState.TOKEN_VALID: {
+        "label": "Token Valid",
+        "description": "Token authenticated but permissions not yet verified.",
+        "icon": "🟡",
+        "color": "yellow",
+        "next_step": "Verify token has catalog_management and business_management scopes.",
+        "fix_url": "https://business.facebook.com/settings/system-users",
+        "blocked_features": ["catalog_operations", "commerce_operations"],
+    },
+    FacebookAPIState.PERMISSIONS_VALID: {
+        "label": "Permissions Verified",
+        "description": "Token has required scopes. Checking catalog access...",
+        "icon": "🟢",
+        "color": "green",
+        "next_step": "Verify catalog accessibility.",
+        "fix_url": "https://www.facebook.com/commerce_manager/catalogs/",
+        "blocked_features": ["commerce_operations"],
+    },
+    FacebookAPIState.CATALOG_ACCESSIBLE: {
+        "label": "Catalog Accessible",
+        "description": "Can read catalog. Checking Commerce Account linkage...",
+        "icon": "🟢",
+        "color": "green",
+        "next_step": "Link catalog to Commerce Account for Marketplace visibility.",
+        "fix_url": "https://business.facebook.com/commerce",
+        "blocked_features": ["marketplace_write"],
+    },
+    FacebookAPIState.COMMERCE_LINKED: {
+        "label": "Commerce Account Linked",
+        "description": "Catalog linked to Commerce Account. Almost ready!",
+        "icon": "🟢",
+        "color": "green",
+        "next_step": "Run final verification to enable API operations.",
+        "fix_url": None,
+        "blocked_features": [],
+    },
+    FacebookAPIState.API_READY: {
+        "label": "API Ready",
+        "description": "All requirements met. Full functionality available.",
+        "icon": "✅",
+        "color": "green",
+        "next_step": None,
+        "fix_url": None,
+        "blocked_features": [],
+    },
+    FacebookAPIState.OFFLINE: {
+        "label": "Offline Mode",
+        "description": "Running in diagnostic mode without credentials.",
+        "icon": "📴",
+        "color": "gray",
+        "next_step": "Configure credentials to enable API features.",
+        "fix_url": "https://developers.facebook.com/docs/development/register/",
+        "blocked_features": ["all_api"],
+    },
+    FacebookAPIState.DEGRADED: {
+        "label": "Degraded Mode",
+        "description": "Limited functionality due to configuration issues.",
+        "icon": "⚠️",
+        "color": "orange",
+        "next_step": "Review configuration to restore full functionality.",
+        "fix_url": None,
+        "blocked_features": ["background_operations"],
+    },
+    FacebookAPIState.BLOCKED: {
+        "label": "Blocked",
+        "description": "Critical issue prevents API operations.",
+        "icon": "🔴",
+        "color": "red",
+        "next_step": "Resolve blocking issues before proceeding.",
+        "fix_url": None,
+        "blocked_features": ["all"],
+    },
+    FacebookAPIState.ERROR: {
+        "label": "Error",
+        "description": "Could not determine API state due to error.",
+        "icon": "❌",
+        "color": "red",
+        "next_step": "Check error details and retry.",
+        "fix_url": None,
+        "blocked_features": ["all"],
+    },
+}
+
+
+def get_current_api_state(
+    token: str = None,
+    catalog_id: str = None,
+    offline_mode: bool = False,
+    skip_api_calls: bool = False
+) -> Tuple[FacebookAPIState, dict]:
+    """
+    Determine the current Facebook API configuration state.
+
+    This is THE authoritative source for API state. All UI elements
+    must derive their enabled/disabled state from this function.
+
+    Args:
+        token: Access token (defaults to FB_ACCESS_TOKEN env var)
+        catalog_id: Catalog ID (defaults to FB_CATALOG_ID env var)
+        offline_mode: If True, return OFFLINE state without checks
+        skip_api_calls: If True, only check local config (no API validation)
+
+    Returns:
+        Tuple of (FacebookAPIState, details_dict)
+        details_dict contains:
+            - state: The state enum value
+            - state_name: Human-readable state name
+            - metadata: State metadata from API_STATE_METADATA
+            - checks: Dict of individual check results
+            - error: Error message if any
+            - timestamp: When state was determined
+    """
+    from datetime import datetime
+
+    # Initialize result
+    checks = {
+        "token_present": False,
+        "token_valid": None,  # None = not checked, True/False = result
+        "permissions_valid": None,
+        "catalog_accessible": None,
+        "commerce_linked": None,
+    }
+    error = None
+
+    # Offline mode - explicit bypass
+    if offline_mode:
+        state = FacebookAPIState.OFFLINE
+        return state, _build_state_result(state, checks, error)
+
+    # Get credentials from env if not provided
+    token = token or os.environ.get("FB_ACCESS_TOKEN", "").strip()
+    catalog_id = catalog_id or os.environ.get("FB_CATALOG_ID", "").strip()
+
+    # Check 1: Token present?
+    if not token:
+        state = FacebookAPIState.NO_CONFIG
+        return state, _build_state_result(state, checks, error)
+
+    checks["token_present"] = True
+
+    # If skip_api_calls, we can only verify token exists
+    if skip_api_calls:
+        state = FacebookAPIState.TOKEN_PRESENT
+        return state, _build_state_result(state, checks, error)
+
+    # Check 2: Token valid? (requires API call)
+    try:
+        token_info = _validate_token_with_api(token)
+        if not token_info.get("is_valid", False):
+            checks["token_valid"] = False
+            state = FacebookAPIState.BLOCKED
+            error = token_info.get("error", "Token validation failed")
+            return state, _build_state_result(state, checks, error)
+
+        checks["token_valid"] = True
+
+        # Check for human vs system user token
+        token_type = token_info.get("type", "unknown")
+        is_system_user = token_type.lower() in ("system_user", "system user")
+
+    except Exception as e:
+        checks["token_valid"] = False
+        state = FacebookAPIState.ERROR
+        error = f"Token validation error: {str(e)}"
+        return state, _build_state_result(state, checks, error)
+
+    # Check 3: Required permissions?
+    required_scopes = {"catalog_management", "business_management"}
+    granted_scopes = set(token_info.get("scopes", []))
+
+    if not required_scopes.issubset(granted_scopes):
+        checks["permissions_valid"] = False
+        missing = required_scopes - granted_scopes
+        state = FacebookAPIState.TOKEN_VALID  # Token valid but missing perms
+        error = f"Missing required permissions: {', '.join(missing)}"
+        return state, _build_state_result(state, checks, error)
+
+    checks["permissions_valid"] = True
+
+    # Check 4: Catalog accessible?
+    if not catalog_id:
+        # Permissions OK but no catalog configured
+        state = FacebookAPIState.PERMISSIONS_VALID
+        error = "No catalog ID configured"
+        return state, _build_state_result(state, checks, error)
+
+    try:
+        catalog_info = _check_catalog_access(token, catalog_id)
+        if not catalog_info.get("accessible", False):
+            checks["catalog_accessible"] = False
+            state = FacebookAPIState.PERMISSIONS_VALID
+            error = catalog_info.get("error", "Catalog not accessible")
+            return state, _build_state_result(state, checks, error)
+
+        checks["catalog_accessible"] = True
+
+    except Exception as e:
+        checks["catalog_accessible"] = False
+        state = FacebookAPIState.PERMISSIONS_VALID
+        error = f"Catalog check error: {str(e)}"
+        return state, _build_state_result(state, checks, error)
+
+    # Check 5: Commerce Account linked?
+    try:
+        commerce_info = _check_commerce_linkage(token, catalog_id)
+        if not commerce_info.get("linked", False):
+            checks["commerce_linked"] = False
+            state = FacebookAPIState.CATALOG_ACCESSIBLE
+            error = "Catalog not linked to Commerce Account"
+            return state, _build_state_result(state, checks, error)
+
+        checks["commerce_linked"] = True
+
+    except Exception as e:
+        checks["commerce_linked"] = False
+        state = FacebookAPIState.CATALOG_ACCESSIBLE
+        error = f"Commerce linkage check error: {str(e)}"
+        return state, _build_state_result(state, checks, error)
+
+    # All checks passed - determine final state
+    if not is_system_user:
+        # Human token - degraded mode
+        state = FacebookAPIState.DEGRADED
+        error = "Using human token. System User token recommended for production."
+        return state, _build_state_result(state, checks, error)
+
+    # Full success
+    state = FacebookAPIState.API_READY
+    return state, _build_state_result(state, checks, error)
+
+
+def _build_state_result(state: FacebookAPIState, checks: dict, error: str = None) -> dict:
+    """Build standardized state result dictionary."""
+    from datetime import datetime
+    return {
+        "state": state,
+        "state_name": state.name,
+        "state_value": state.value,
+        "metadata": API_STATE_METADATA.get(state, {}),
+        "checks": checks,
+        "error": error,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+def _validate_token_with_api(token: str) -> dict:
+    """
+    Validate token with Meta's debug_token endpoint.
+
+    Returns:
+        dict with is_valid, scopes, type, expires_at, error
+    """
+    try:
+        # Use token to debug itself (app-level debug requires app token)
+        url = f"{GRAPH_BASE}/debug_token"
+        params = {"input_token": token, "access_token": token}
+        resp = requests.get(url, params=params, timeout=15)
+
+        if resp.status_code != 200:
+            return {
+                "is_valid": False,
+                "error": f"API returned {resp.status_code}: {resp.text[:200]}",
+            }
+
+        data = resp.json().get("data", {})
+        return {
+            "is_valid": data.get("is_valid", False),
+            "scopes": data.get("scopes", []),
+            "type": data.get("type", "unknown"),
+            "expires_at": data.get("expires_at", 0),
+            "app_id": data.get("app_id"),
+            "user_id": data.get("user_id"),
+            "error": data.get("error", {}).get("message") if not data.get("is_valid") else None,
+        }
+
+    except requests.RequestException as e:
+        return {
+            "is_valid": False,
+            "error": f"Network error: {str(e)}",
+        }
+
+
+def _check_catalog_access(token: str, catalog_id: str) -> dict:
+    """
+    Check if token can access the specified catalog.
+
+    Returns:
+        dict with accessible, catalog_name, vertical, error
+    """
+    try:
+        url = f"{GRAPH_BASE}/{catalog_id}"
+        params = {
+            "access_token": token,
+            "fields": "id,name,vertical,product_count",
+        }
+        resp = requests.get(url, params=params, timeout=15)
+
+        if resp.status_code != 200:
+            error_data = resp.json().get("error", {})
+            return {
+                "accessible": False,
+                "error": error_data.get("message", f"HTTP {resp.status_code}"),
+            }
+
+        data = resp.json()
+        return {
+            "accessible": True,
+            "catalog_id": data.get("id"),
+            "catalog_name": data.get("name"),
+            "vertical": data.get("vertical"),
+            "product_count": data.get("product_count", 0),
+        }
+
+    except requests.RequestException as e:
+        return {
+            "accessible": False,
+            "error": f"Network error: {str(e)}",
+        }
+
+
+def _check_commerce_linkage(token: str, catalog_id: str) -> dict:
+    """
+    Check if catalog is linked to a Commerce Account.
+
+    This is THE most common failure point. A valid catalog ≠ Marketplace visibility.
+
+    Returns:
+        dict with linked, commerce_account_id, commerce_account_name, error
+    """
+    try:
+        url = f"{GRAPH_BASE}/{catalog_id}"
+        params = {
+            "access_token": token,
+            "fields": "id,name,commerce_merchant_settings",
+        }
+        resp = requests.get(url, params=params, timeout=15)
+
+        if resp.status_code != 200:
+            error_data = resp.json().get("error", {})
+            return {
+                "linked": False,
+                "error": error_data.get("message", f"HTTP {resp.status_code}"),
+            }
+
+        data = resp.json()
+        commerce_settings = data.get("commerce_merchant_settings")
+
+        if not commerce_settings:
+            return {
+                "linked": False,
+                "error": "Catalog not linked to Commerce Account. Products will NOT appear on Marketplace.",
+            }
+
+        return {
+            "linked": True,
+            "commerce_merchant_settings": commerce_settings,
+        }
+
+    except requests.RequestException as e:
+        return {
+            "linked": False,
+            "error": f"Network error: {str(e)}",
+        }
+
+
+def is_feature_allowed(state: FacebookAPIState, feature: str) -> Tuple[bool, str]:
+    """
+    Check if a feature is allowed given the current API state.
+
+    Args:
+        state: Current FacebookAPIState
+        feature: Feature name to check
+
+    Returns:
+        Tuple of (allowed: bool, reason: str)
+    """
+    metadata = API_STATE_METADATA.get(state, {})
+    blocked_features = metadata.get("blocked_features", [])
+
+    if "all" in blocked_features:
+        return False, f"All features blocked in {state.name} state. {metadata.get('next_step', '')}"
+
+    if feature in blocked_features:
+        return False, f"{feature} blocked in {state.name} state. {metadata.get('next_step', '')}"
+
+    return True, "Feature allowed"
+
+
+def get_state_progress(state: FacebookAPIState) -> dict:
+    """
+    Get progress information for the current state.
+
+    Returns dict with:
+        - current_step: Current step number (1-7)
+        - total_steps: Total steps (7)
+        - percent: Progress percentage
+        - completed_states: List of completed states
+        - next_state: Next state to achieve (or None if complete)
+    """
+    # Define progression order
+    progression = [
+        FacebookAPIState.NO_CONFIG,
+        FacebookAPIState.TOKEN_PRESENT,
+        FacebookAPIState.TOKEN_VALID,
+        FacebookAPIState.PERMISSIONS_VALID,
+        FacebookAPIState.CATALOG_ACCESSIBLE,
+        FacebookAPIState.COMMERCE_LINKED,
+        FacebookAPIState.API_READY,
+    ]
+
+    # Handle special states
+    if state in (FacebookAPIState.OFFLINE, FacebookAPIState.BLOCKED,
+                 FacebookAPIState.ERROR, FacebookAPIState.DEGRADED):
+        return {
+            "current_step": 0,
+            "total_steps": len(progression) - 1,  # Exclude NO_CONFIG
+            "percent": 0,
+            "completed_states": [],
+            "next_state": FacebookAPIState.TOKEN_PRESENT,
+            "is_special_state": True,
+            "special_state_type": state.name,
+        }
+
+    try:
+        current_idx = progression.index(state)
+    except ValueError:
+        current_idx = 0
+
+    completed = progression[1:current_idx + 1]  # Exclude NO_CONFIG from completed
+    next_state = progression[current_idx + 1] if current_idx < len(progression) - 1 else None
+
+    total_steps = len(progression) - 1  # Exclude NO_CONFIG
+    current_step = current_idx  # NO_CONFIG = 0, TOKEN_PRESENT = 1, etc.
+
+    return {
+        "current_step": current_step,
+        "total_steps": total_steps,
+        "percent": int((current_step / total_steps) * 100) if total_steps > 0 else 0,
+        "completed_states": [s.name for s in completed],
+        "next_state": next_state.name if next_state else None,
+        "is_special_state": False,
     }
 
 
