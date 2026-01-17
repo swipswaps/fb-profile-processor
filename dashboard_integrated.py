@@ -2489,9 +2489,9 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                                         render_listing_card(row)
 
                 # =============================================================
-                # EXPORT LISTINGS - Unified export matching Profiles tab
+                # EXPORT LISTINGS - receipts-ocr pattern: tabs + instant preview
                 # REGRESSION GUARD: All 5 formats must be available (.txt, .csv, .xlsx, .json, .sql)
-                # Uses shared export_functionality.py infrastructure
+                # Pattern: Horizontal tabs, preview ALWAYS visible, NO truncation
                 # =============================================================
                 st.markdown("---")
                 st.subheader("📥 Export Listings")
@@ -2505,25 +2505,17 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                         create_json_download, create_sql_download
                     )
 
-                    # Export format selection (matches Profiles tab UX)
-                    col_fmt, col_opts = st.columns([2, 1])
-
-                    with col_fmt:
-                        export_format = st.radio(
-                            "Export Format",
-                            ['CSV', 'JSON', 'Excel (.xlsx)', 'Text (.txt)', 'SQL (.sql)', 'ZIP with Images'],
-                            horizontal=True,
-                            key="mp_export_format"
-                        )
-
-                    with col_opts:
-                        st.markdown(f"**{len(items_df)} listings** to export")
+                    st.markdown(f"**{len(items_df)} listings** ready to export")
 
                     # Generate timestamp for filenames
                     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-                    # Export buttons per format
-                    if export_format == 'CSV':
+                    # TABS for format selection (receipts-ocr pattern: instant switch)
+                    tab_csv, tab_json, tab_xlsx, tab_txt, tab_sql, tab_zip = st.tabs([
+                        "📊 CSV", "🔧 JSON", "📗 Excel", "📄 Text", "🗄️ SQL", "📦 ZIP"
+                    ])
+
+                    with tab_csv:
                         csv_data = create_csv_download(items_df)
                         st.download_button(
                             label="📥 Download CSV",
@@ -2532,8 +2524,11 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="text/csv",
                             key="mp_dl_csv"
                         )
+                        # INSTANT PREVIEW - full content, scrollable dataframe
+                        st.markdown("**Preview:**")
+                        st.dataframe(items_df, use_container_width=True, height=300)
 
-                    elif export_format == 'JSON':
+                    with tab_json:
                         json_data = create_json_download(items_df)
                         st.download_button(
                             label="📥 Download JSON",
@@ -2542,11 +2537,10 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="application/json",
                             key="mp_dl_json"
                         )
-                        with st.expander("🔧 Preview JSON"):
-                            preview = json_data[:1500] + "\n..." if len(json_data) > 1500 else json_data
-                            st.code(preview, language="json")
-
-                    elif export_format == 'Excel (.xlsx)':
+                        # INSTANT PREVIEW - full JSON, scrollable textarea
+                        st.markdown("**Preview:**")
+                        st.text_area("JSON Output", json_data, height=300, key="mp_json_preview")
+                    with tab_xlsx:
                         try:
                             excel_data = create_excel_download(items_df)
                             st.download_button(
@@ -2556,10 +2550,13 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 key="mp_dl_xlsx"
                             )
+                            # INSTANT PREVIEW - table view like receipts-ocr
+                            st.markdown("**Preview:**")
+                            st.dataframe(items_df, use_container_width=True, height=300)
                         except Exception as e:
                             st.error(f"Excel export failed: {e}. Install openpyxl: pip install openpyxl")
 
-                    elif export_format == 'Text (.txt)':
+                    with tab_txt:
                         txt_data = create_txt_download(items_df)
                         st.download_button(
                             label="📥 Download TXT",
@@ -2568,11 +2565,11 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="text/plain",
                             key="mp_dl_txt"
                         )
-                        with st.expander("📄 Preview TXT"):
-                            preview = txt_data[:1500] + "\n..." if len(txt_data) > 1500 else txt_data
-                            st.code(preview, language="text")
+                        # INSTANT PREVIEW - full text, scrollable textarea
+                        st.markdown("**Preview:**")
+                        st.text_area("Text Output", txt_data, height=300, key="mp_txt_preview")
 
-                    elif export_format == 'SQL (.sql)':
+                    with tab_sql:
                         sql_data = create_sql_download(items_df, table_name="marketplace_listings")
                         st.download_button(
                             label="📥 Download SQL",
@@ -2581,12 +2578,12 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="text/plain",
                             key="mp_dl_sql"
                         )
-                        with st.expander("💾 Preview SQL"):
-                            preview = sql_data[:1500] + "\n..." if len(sql_data) > 1500 else sql_data
-                            st.code(preview, language="sql")
+                        # INSTANT PREVIEW - full SQL, scrollable textarea
+                        st.markdown("**Preview:**")
+                        st.text_area("SQL Output", sql_data, height=300, key="mp_sql_preview")
 
-                    elif export_format == 'ZIP with Images':
-                        st.info("Creating ZIP file with listings data and images...")
+                    with tab_zip:
+                        st.markdown("**ZIP includes all formats + images**")
 
                         # Create ZIP
                         zip_buffer = io.BytesIO()
@@ -2621,7 +2618,7 @@ Total Listings: {len(items_df)}
 """
                             zf.writestr('README.txt', readme)
 
-                        st.success(f"✅ ZIP created with {images_added} images")
+                        st.success(f"✅ ZIP ready with {images_added} images")
 
                         st.download_button(
                             label="📥 Download ZIP",
@@ -2630,6 +2627,16 @@ Total Listings: {len(items_df)}
                             mime="application/zip",
                             key="mp_dl_zip"
                         )
+
+                        # INSTANT PREVIEW - show what's in ZIP
+                        st.markdown("**Contents:**")
+                        st.markdown(f"""
+                        - `listings.csv` - CSV format
+                        - `listings.json` - JSON format
+                        - `listings.txt` - Text format
+                        - `listings.sql` - SQL INSERT statements
+                        - `images/` - {images_added} image files
+                        """)
 
     # ========== TAB 8: API Config ==========
     if current_tab_index == 7:
