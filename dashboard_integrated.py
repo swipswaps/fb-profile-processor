@@ -10,6 +10,7 @@ USAGE:
 import streamlit as st
 import pandas as pd
 import sqlite3
+import json
 import fb_profile_processor as processor
 import selenium_enricher  # Firefox-based enricher (works with existing profile)
 import marketplace_scraper  # Marketplace items scraper
@@ -291,7 +292,7 @@ if 'last_processed' not in st.session_state:
     st.session_state.last_processed = None
 if 'selected_db' not in st.session_state:
     st.session_state.selected_db = 'facebook_profiles.db'
-    logger.info(f"session_state.selected_db initialized to: facebook_profiles.db")
+    logger.info("session_state.selected_db initialized to: facebook_profiles.db")
 if 'firefox_ready' not in st.session_state:
     st.session_state.firefox_ready = None
 if 'fb_logged_in_user' not in st.session_state:
@@ -325,7 +326,7 @@ def check_firefox_ready():
         if profile_path:
             return True
         return False
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -582,9 +583,9 @@ def enrich_with_browser_ui(db_file, rate_limit=3.0):
                 logger.info(f"Enrichment SUCCESS: {fb_id} -> {username}")
 
             except Exception as e:
-                logger.error(f"Enrichment FAILED: {profile_id} - {e}")
+                logger.error(f"Enrichment FAILED: {fb_id} - {e}")
                 with results_container:
-                    st.error(f"✗ {profile_id} - Error: {str(e)}")
+                    st.error(f"✗ {fb_id} - Error: {str(e)}")
                 error_count += 1
 
             # Rate limiting
@@ -937,7 +938,7 @@ def main():
 
         # Scan button - always available when Firefox ready
         if st.sidebar.button(
-            f"🔄 Scan My Listings",
+            "🔄 Scan My Listings",
             width="stretch",
             type="primary",
             help="Scan Facebook Marketplace for your selling items. Opens Firefox briefly.",
@@ -1332,7 +1333,7 @@ def main():
                 with qf_col2:
                     show_enriched = st.button(f"✅ Show Enriched ({stats.get('enriched', 0)})", width="stretch")
                 with qf_col3:
-                    show_no_images = st.button(f"📷 Without Images", width="stretch")
+                    show_no_images = st.button("📷 Without Images", width="stretch")
                 with qf_col4:
                     show_all = st.button("📋 Show All", width="stretch")
 
