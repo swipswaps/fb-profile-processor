@@ -25,13 +25,13 @@ import sys
 
 # Live search component (keystroke-based - Streamlit native text_input requires Enter)
 # REGRESSION GUARD: Do NOT replace with st.text_input - it cannot do live filtering
-# See: https://github.com/m-wrzr/streamlit-searchbox
+# See: https://github.com/blackary/streamlit-keyup
 try:
-    from streamlit_searchbox import st_searchbox
+    from st_keyup import st_keyup
     LIVE_SEARCH_AVAILABLE = True
 except ImportError:
     LIVE_SEARCH_AVAILABLE = False
-    logging.warning("streamlit-searchbox not installed - falling back to Enter-based search")
+    logging.warning("streamlit-keyup not installed - falling back to Enter-based search")
 
 # ======================
 # LOGGING CONFIGURATION
@@ -2316,27 +2316,18 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                 # =============================================================
                 col1, col2, col3 = st.columns(3)
 
-                # LIVE SEARCH (keystroke-based using streamlit-searchbox)
+                # LIVE SEARCH (keystroke-based using streamlit-keyup)
                 # This is the ONLY way to get live filtering in Streamlit.
                 # st.text_input requires Enter and shows "Press Enter to apply" - unacceptable.
+                # st_searchbox requires clicking a dropdown item - not what we want.
+                # st_keyup fires on every keystroke - exactly what we need.
                 with col1:
                     if LIVE_SEARCH_AVAILABLE:
-                        # Build search options from titles
-                        all_titles = items_df['title'].dropna().unique().tolist() if 'title' in items_df.columns else []
-
-                        def search_titles(query: str) -> list:
-                            """Return matching titles for live search dropdown."""
-                            if not query:
-                                return []
-                            matches = [t for t in all_titles if query.lower() in str(t).lower()]
-                            return matches[:10]  # Limit to 10 suggestions
-
-                        search = st_searchbox(
-                            search_titles,
+                        # st_keyup returns the typed value on every keystroke
+                        search = st_keyup(
+                            "🔍 Type to filter...",
                             key="mp_live_search",
-                            placeholder="🔍 Type to filter...",
-                            clear_on_submit=False,
-                            default=None
+                            debounce=300  # 300ms debounce to avoid too many reruns
                         )
                     else:
                         # Fallback: native text_input (requires Enter - documented limitation)
@@ -2355,9 +2346,10 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                 with col3:
                     sort_by = st.selectbox("Sort by", ["Newest", "Price (Low)", "Price (High)", "Title"], key="mp_sort")
 
-                # Apply search filter (live if searchbox available, else on Enter)
+                # Apply search filter (live with st_keyup, or on Enter with fallback)
                 if search and not items_df.empty:
-                    items_df = items_df[items_df['title'].str.contains(str(search), case=False, na=False)]
+                    # Use regex=False to avoid warning about regex patterns
+                    items_df = items_df[items_df['title'].str.contains(str(search), case=False, na=False, regex=False)]
 
                 # Apply status filter (instant, no Enter needed)
                 if status_filter and status_filter != "All" and not items_df.empty:
