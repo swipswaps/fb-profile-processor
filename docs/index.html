@@ -229,38 +229,54 @@
         // Check on page load
         checkStreamlit();
 
-        // Periodically check if user is on fallback page
+        // Periodically check if user is on fallback page - AUTO-CONNECT when detected
+        let connectionAttempts = 0;
         setInterval(() => {
             if (document.getElementById('fallback').style.display === 'block') {
-                // Silent check - don't show loading
-                fetch(HEALTH_ENDPOINT, { method: 'GET', mode: 'no-cors' })
-                    .then(() => {
-                        // Might be up, update status indicator
-                        const indicator = document.getElementById('statusIndicator');
-                        indicator.className = 'status online';
-                        indicator.innerHTML = `
-                            <div class="dot online"></div>
-                            <div>
-                                <strong>Streamlit Server Running!</strong>
-                                <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Click "Connect Now" to open the dashboard</p>
-                            </div>
-                        `;
-                    })
-                    .catch(() => {
-                        // Still not running - ensure instructional messaging
-                        const indicator = document.getElementById('statusIndicator');
-                        if (!indicator.classList.contains('online')) {
-                            indicator.innerHTML = `
-                                <div class="dot offline"></div>
-                                <div>
-                                    <strong>Streamlit Not Started Yet</strong>
-                                    <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Run the installation command above to start</p>
-                                </div>
-                            `;
-                        }
-                    });
+                // Try to detect Streamlit via iframe load test
+                const testFrame = document.createElement('iframe');
+                testFrame.style.display = 'none';
+                testFrame.src = STREAMLIT_URL;
+                document.body.appendChild(testFrame);
+
+                let resolved = false;
+
+                testFrame.onload = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    document.body.removeChild(testFrame);
+                    connectionAttempts++;
+
+                    // Update status to show we're connecting
+                    const indicator = document.getElementById('statusIndicator');
+                    indicator.className = 'status online';
+                    indicator.innerHTML = `
+                        <div class="dot online"></div>
+                        <div>
+                            <strong>Streamlit Detected! Connecting...</strong>
+                            <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Auto-connecting in 1 second</p>
+                        </div>
+                    `;
+
+                    // Auto-connect after brief delay to show user what's happening
+                    setTimeout(() => showStreamlit(), 1000);
+                };
+
+                testFrame.onerror = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    try { document.body.removeChild(testFrame); } catch(e) {}
+                };
+
+                // Cleanup timeout
+                setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        try { document.body.removeChild(testFrame); } catch(e) {}
+                    }
+                }, 3000);
             }
-        }, 5000);
+        }, 3000);
     </script>
 </body>
 </html>
