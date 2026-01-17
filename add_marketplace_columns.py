@@ -21,10 +21,10 @@ def migrate_database(db_path: str) -> bool:
     if not Path(db_path).exists():
         print(f"❌ Database not found: {db_path}")
         return False
-    
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Define new columns
     new_columns = [
         ("fb_join_date", "TEXT"),
@@ -35,19 +35,19 @@ def migrate_database(db_path: str) -> bool:
         ("fb_picture_url", "TEXT"),
         ("fb_cover_url", "TEXT"),
     ]
-    
+
     print("=== DATABASE MIGRATION: ADD MARKETPLACE COLUMNS ===")
     print(f"Database: {db_path}\n")
-    
+
     # Get existing columns
     cursor.execute("PRAGMA table_info(profiles);")
     existing_columns = {row[1] for row in cursor.fetchall()}
     print(f"Existing columns: {len(existing_columns)}")
-    
+
     # Add each column if it doesn't exist
     added_count = 0
     skipped_count = 0
-    
+
     for col_name, col_type in new_columns:
         if col_name in existing_columns:
             print(f"  ⏭️  {col_name:30} {col_type:10} (already exists)")
@@ -61,25 +61,25 @@ def migrate_database(db_path: str) -> bool:
                 print(f"  ❌ {col_name:30} {col_type:10} (error: {e})")
                 conn.close()
                 return False
-    
+
     conn.commit()
-    
+
     # Verify final schema
     cursor.execute("PRAGMA table_info(profiles);")
     final_columns = cursor.fetchall()
-    
+
     print(f"\n=== MIGRATION SUMMARY ===")
     print(f"Columns added: {added_count}")
     print(f"Columns skipped: {skipped_count}")
     print(f"Total columns now: {len(final_columns)}")
-    
+
     # Show new columns
     print(f"\n=== NEW COLUMNS VERIFIED ===")
     for row in final_columns:
         col_id, col_name, col_type, not_null, default, pk = row
         if col_name in [col[0] for col in new_columns]:
             print(f"  {col_name:30} {col_type:10}")
-    
+
     conn.close()
     print(f"\n✅ Migration complete: {db_path}")
     return True
@@ -90,7 +90,7 @@ if __name__ == "__main__":
         print("Usage: python3 add_marketplace_columns.py <database_path>")
         print("Example: python3 add_marketplace_columns.py test_profiles.db")
         sys.exit(1)
-    
+
     db_path = sys.argv[1]
     success = migrate_database(db_path)
     sys.exit(0 if success else 1)

@@ -52,19 +52,19 @@ def extract_profile_picture(driver) -> str:
     try:
         # Find all images on page
         img_elements = driver.find_elements(By.TAG_NAME, "img")
-        
+
         candidates = []
         for img in img_elements:
             src = img.get_attribute("src")
             if not src:
                 continue
-                
+
             # Filter for Facebook CDN images
             if "fbcdn.net" in src or "facebook.com" in src:
                 # Skip small icons/thumbnails (usually <100px)
                 width = img.get_attribute("width")
                 height = img.get_attribute("height")
-                
+
                 # Calculate priority (prefer larger images)
                 priority = 0
                 if width and height:
@@ -72,16 +72,16 @@ def extract_profile_picture(driver) -> str:
                         priority = int(width) * int(height)
                     except ValueError:
                         priority = 0
-                
+
                 candidates.append((priority, src))
-        
+
         # Return highest priority (largest) image
         if candidates:
             candidates.sort(reverse=True)
             return candidates[0][1]
-            
+
         return None
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting profile picture: {e}")
         return None
@@ -102,18 +102,18 @@ def extract_cover_photo(driver) -> str:
     try:
         # Find all images
         img_elements = driver.find_elements(By.TAG_NAME, "img")
-        
+
         for img in img_elements:
             src = img.get_attribute("src")
             if not src:
                 continue
-                
+
             # Look for cover photo indicators
             if "fbcdn.net" in src and any(keyword in src.lower() for keyword in ["cover", "banner"]):
                 return src
-        
+
         return None
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting cover photo: {e}")
         return None
@@ -134,23 +134,23 @@ def extract_join_date(driver) -> str:
         # Search for "Joined Facebook" text
         xpath = "//*[contains(text(), 'Joined Facebook')]"
         text = extract_text_by_xpath(driver, xpath)
-        
+
         if text:
             # Clean up text: "Joined Facebook in 2018" -> "2018"
             match = re.search(r'Joined Facebook in (\d{4})', text)
             if match:
                 return match.group(1)
-            
+
             # Alternative: "Joined May 2020"
             match = re.search(r'Joined (\w+ \d{4})', text)
             if match:
                 return match.group(1)
-            
+
             # Return full text if no pattern match
             return text
-            
+
         return None
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting join date: {e}")
         return None
@@ -170,15 +170,15 @@ def extract_active_listings_count(driver) -> int:
     try:
         xpath = "//*[contains(text(), 'active listing')]"
         text = extract_text_by_xpath(driver, xpath)
-        
+
         if text:
             # Extract number: "5 active listings" -> 5
             match = re.search(r'(\d+)\s+active listing', text)
             if match:
                 return int(match.group(1))
-        
+
         return None
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting listings count: {e}")
         return None
@@ -200,20 +200,20 @@ def extract_response_info(driver) -> tuple:
         # Look for response-related text
         xpath = "//*[contains(text(), 'respond')]"
         elements = driver.find_elements(By.XPATH, xpath)
-        
+
         response_rate = None
         response_time = None
-        
+
         for elem in elements:
             text = elem.text.strip()
-            
+
             if "Usually responds" in text:
                 response_time = text  # "Usually responds within 1 hour"
             elif "responsive" in text.lower():
                 response_rate = text  # "Very responsive"
-        
+
         return response_rate, response_time
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting response info: {e}")
         return None, None
@@ -239,19 +239,19 @@ def extract_seller_badges(driver) -> str:
             "Verified",
             "Trusted seller"
         ]
-        
+
         badges = []
-        
+
         for keyword in badge_keywords:
             xpath = f"//*[contains(text(), '{keyword}')]"
             if extract_text_by_xpath(driver, xpath):
                 badges.append(keyword)
-        
+
         if badges:
             return json.dumps(badges)
-        
+
         return None
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting seller badges: {e}")
         return None
@@ -272,26 +272,26 @@ def extract_location(driver) -> str:
         # Check for "Lives in" text
         xpath = "//*[contains(text(), 'Lives in')]"
         text = extract_text_by_xpath(driver, xpath)
-        
+
         if text:
             # Clean up: "Lives in Largo, Florida" -> "Largo, Florida"
             match = re.search(r'Lives in (.+)', text)
             if match:
                 return match.group(1)
             return text
-        
+
         # Alternative: "From XYZ"
         xpath = "//*[contains(text(), 'From')]"
         text = extract_text_by_xpath(driver, xpath)
-        
+
         if text:
             match = re.search(r'From (.+)', text)
             if match:
                 return match.group(1)
             return text
-        
+
         return None
-        
+
     except Exception as e:
         print(f"  ⚠️  Error extracting location: {e}")
         return None
@@ -309,7 +309,7 @@ def enrich_profile(driver, profile_url: str) -> dict:
         Dictionary with extracted profile data
     """
     print(f"\n🔍 Enriching: {profile_url}")
-    
+
     result = {
         "fb_name": None,
         "fb_username": None,
@@ -323,16 +323,16 @@ def enrich_profile(driver, profile_url: str) -> dict:
         "fb_response_time": None,
         "fb_seller_badges": None,
     }
-    
+
     try:
         # Navigate to profile
         driver.get(profile_url)
-        
+
         # Wait for page to load
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
-        
+
         # Extract name from page title or h1
         try:
             title = driver.title
@@ -341,12 +341,12 @@ def enrich_profile(driver, profile_url: str) -> dict:
                 result["fb_name"] = title.split("|")[0].strip()
         except Exception:
             pass
-        
+
         # Extract username from URL
         try:
             current_url = driver.current_url
             result["fb_link"] = current_url
-            
+
             # Parse username from URL
             # https://www.facebook.com/olivia.c.adamson.2025
             match = re.search(r'facebook\.com/([^/?]+)', current_url)
@@ -356,20 +356,20 @@ def enrich_profile(driver, profile_url: str) -> dict:
                     result["fb_username"] = username
         except Exception:
             pass
-        
+
         # Extract all marketplace fields
         result["fb_location_name"] = extract_location(driver)
         result["fb_picture_url"] = extract_profile_picture(driver)
         result["fb_cover_url"] = extract_cover_photo(driver)
         result["fb_join_date"] = extract_join_date(driver)
         result["fb_active_listings_count"] = extract_active_listings_count(driver)
-        
+
         response_rate, response_time = extract_response_info(driver)
         result["fb_response_rate"] = response_rate
         result["fb_response_time"] = response_time
-        
+
         result["fb_seller_badges"] = extract_seller_badges(driver)
-        
+
         # Print summary
         print(f"  ✅ Name: {result['fb_name']}")
         print(f"  ✅ Username: {result['fb_username']}")
@@ -379,12 +379,12 @@ def enrich_profile(driver, profile_url: str) -> dict:
         print(f"  ✅ Active Listings: {result['fb_active_listings_count']}")
         print(f"  ✅ Response Rate: {result['fb_response_rate']}")
         print(f"  ✅ Badges: {result['fb_seller_badges']}")
-        
+
     except TimeoutException:
         print(f"  ❌ Timeout loading page")
     except Exception as e:
         print(f"  ❌ Error: {e}")
-    
+
     return result
 
 

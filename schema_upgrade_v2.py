@@ -109,14 +109,14 @@ INDEXES = [
 def migrate_database(db_path):
     """Migrate existing database to new schema"""
     logging.info(f"Starting migration for {db_path}")
-    
+
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
-    
+
     # Check if old table exists
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='profiles'")
     old_table_exists = cur.fetchone() is not None
-    
+
     if not old_table_exists:
         logging.info("No existing 'profiles' table found. Creating new schema...")
         cur.execute(GRAPH_API_SCHEMA)
@@ -126,11 +126,11 @@ def migrate_database(db_path):
         logging.info("✅ New schema created successfully")
         conn.close()
         return
-    
+
     # Create new table
     logging.info("Creating new Graph API compatible schema...")
     cur.execute(GRAPH_API_SCHEMA)
-    
+
     # Migrate data from old schema
     logging.info("Migrating existing data...")
     cur.execute("""
@@ -153,24 +153,24 @@ def migrate_database(db_path):
             clean_url, profile_id, og_title, og_description, page_title
         FROM profiles
     """)
-    
+
     rows_migrated = cur.rowcount
     logging.info(f"✅ Migrated {rows_migrated} rows")
-    
+
     # Create indexes
     for idx_sql in INDEXES:
         cur.execute(idx_sql)
-    
+
     # Rename tables
     logging.info("Backing up old table...")
     cur.execute("ALTER TABLE profiles RENAME TO profiles_old_backup")
     cur.execute("ALTER TABLE profiles_v2 RENAME TO profiles")
-    
+
     conn.commit()
     logging.info("✅ Migration complete!")
     logging.info(f"   Old table backed up as 'profiles_old_backup'")
     logging.info(f"   New table 'profiles' is now active")
-    
+
     conn.close()
 
 
@@ -178,17 +178,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Upgrade database to Graph API compatible schema')
     parser.add_argument('--database', '-d', required=True, help='Database file path')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be done without making changes')
-    
+
     args = parser.parse_args()
-    
+
     if not Path(args.database).exists():
         logging.error(f"Database file not found: {args.database}")
         exit(1)
-    
+
     if args.dry_run:
         logging.info("DRY RUN MODE - No changes will be made")
         logging.info(f"Would migrate: {args.database}")
         exit(0)
-    
+
     migrate_database(args.database)
 

@@ -125,7 +125,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["📥 Process URLs", "📊 View Data", "✏️
 
 with tab1:
     st.subheader("📥 Process Facebook Profile URLs")
-    
+
     # URL input
     url_text = st.text_area(
         "Paste Facebook Marketplace URLs (one per line):",
@@ -133,19 +133,19 @@ with tab1:
         placeholder="https://www.facebook.com/marketplace/profile/100010505562305/?referralSurface=messenger_banner&referralCode=4\nhttps://www.facebook.com/marketplace/profile/100001669012324/?referralSurface=messenger_banner&referralCode=4",
         key="url_input"
     )
-    
+
     # Parse URLs
     urls = []
     if url_text:
         urls = [u.strip() for u in url_text.split('\n') 
                 if u.strip() and u.strip().lower().startswith('http')]
-    
+
     # Show URL count
     if urls:
         st.success(f"✅ Found {len(urls)} valid URL(s)")
     else:
         st.info("ℹ️ Paste URLs above to get started")
-    
+
     # Settings (collapsed)
     with st.expander("⚙️ Advanced Settings"):
         col1, col2 = st.columns(2)
@@ -161,7 +161,7 @@ with tab1:
                 5, 60, 15,
                 help="How long to wait for each request"
             )
-    
+
     # THE BUTTON
     button_clicked = st.button(
         "🚀 Process URLs", 
@@ -170,29 +170,29 @@ with tab1:
         type="primary",
         key="process_button"
     )
-    
+
     # PROCESS URLS (with session state management)
     if button_clicked:
         st.session_state.processing_complete = False
         st.session_state.last_results = None
-        
+
         st.info(f"🔄 Processing {len(urls)} URLs...")
-        
+
         # Progress indicators
         progress_bar = st.progress(0)
         status_text = st.empty()
         results_container = st.container()
-        
+
         success_count = 0
         error_count = 0
         skipped_count = 0
-        
+
         # Process each URL
         for i, url in enumerate(urls):
             # Update progress
             progress_bar.progress((i + 1) / len(urls))
             status_text.text(f"Processing {i+1}/{len(urls)}: {url[:60]}...")
-            
+
             try:
                 # Process single URL
                 result = processor.process_single_url(url, selected_db, timeout)

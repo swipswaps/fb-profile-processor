@@ -93,25 +93,25 @@ def get_available_databases():
         try:
             conn = sqlite3.connect(db_file)
             cursor = conn.cursor()
-            
+
             # Get counts
             cursor.execute("SELECT COUNT(*) FROM profiles")
             total = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM profiles WHERE enrichment_status = 'enriched'")
             enriched = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM profiles WHERE fb_picture_url IS NOT NULL AND fb_picture_url != ''")
             with_images = cursor.fetchone()[0]
-            
+
             # Get last update
             cursor.execute("SELECT MAX(updated_at) FROM profiles")
             last_update = cursor.fetchone()[0] or "Never"
-            
+
             conn.close()
-            
+
             pct_complete = (enriched / total * 100) if total > 0 else 0
-            
+
             databases.append({
                 'name': db_file,
                 'total': total,
@@ -129,7 +129,7 @@ def get_available_databases():
                 'pct_complete': 0,
                 'last_update': f"Error: {e}"
             })
-    
+
     return sorted(databases, key=lambda x: x['total'], reverse=True)
 
 def get_profiles_df(db_path, simplified=True):
@@ -137,18 +137,18 @@ def get_profiles_df(db_path, simplified=True):
     conn = sqlite3.connect(db_path)
     df = pd.read_sql_query("SELECT * FROM profiles ORDER BY id DESC", conn)
     conn.close()
-    
+
     if df.empty:
         return df
-    
+
     # Add status badge column
     df['Status'] = df.apply(get_status_badge, axis=1)
-    
+
     if simplified:
         # Return simplified view (Phase 1C)
         simple_cols = ['Status', 'fb_name', 'fb_location_name', 'fb_join_date', 'fb_picture_url']
         simple_cols = [c for c in simple_cols if c in df.columns]
-        
+
         # Rename for user-friendliness
         rename_map = {
             'fb_name': 'Name',
@@ -156,16 +156,16 @@ def get_profiles_df(db_path, simplified=True):
             'fb_join_date': 'Join Date',
             'fb_picture_url': 'Has Photo'
         }
-        
+
         result = df[['id'] + simple_cols].copy()
         result.rename(columns=rename_map, inplace=True)
-        
+
         # Convert photo URL to Yes/No
         if 'Has Photo' in result.columns:
             result['Has Photo'] = result['Has Photo'].apply(lambda x: '✅' if x else '❌')
-        
+
         return result, df  # Return both simplified and full
-    
+
     return df, df
 
 def get_stats(db_path):
@@ -173,21 +173,21 @@ def get_stats(db_path):
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute("SELECT COUNT(*) FROM profiles")
         total = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM profiles WHERE enrichment_status = 'enriched'")
         enriched = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM profiles WHERE enrichment_status = 'pending'")
         pending = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM profiles WHERE fb_picture_url IS NOT NULL AND fb_picture_url != ''")
         with_images = cursor.fetchone()[0]
-        
+
         conn.close()
-        
+
         return {
             'total': total,
             'enriched': enriched,

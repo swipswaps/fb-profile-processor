@@ -25,7 +25,7 @@ class FeatureFlags:
     All API features are DISABLED by default.
     Firefox enrichment remains the default and stable method.
     """
-    
+
     # Default values - API disabled, Firefox enabled
     DEFAULTS = {
         # Core features (always enabled)
@@ -34,18 +34,18 @@ class FeatureFlags:
         'export_functionality': True,
         'edit_records': True,
         'analytics': True,
-        
+
         # API features (disabled by default)
         'api_integration': False,
         'api_credentials_ui': False,
         'hybrid_provider': False,
-        
+
         # Experimental features
         'experimental_ui': False,
         'card_view': True,  # New card view - enabled
         'detail_view': True,  # New detail view - enabled
     }
-    
+
     @staticmethod
     def is_enabled(feature: str) -> bool:
         """
@@ -65,13 +65,13 @@ class FeatureFlags:
         # Check environment variable first
         env_key = f"ENABLE_{feature.upper()}"
         env_value = os.getenv(env_key)
-        
+
         if env_value is not None:
             return env_value.lower() in ('true', '1', 'yes', 'on')
-        
+
         # Fall back to default
         return FeatureFlags.DEFAULTS.get(feature, False)
-    
+
     @staticmethod
     def get_all() -> Dict[str, bool]:
         """
@@ -84,7 +84,7 @@ class FeatureFlags:
             feature: FeatureFlags.is_enabled(feature)
             for feature in FeatureFlags.DEFAULTS.keys()
         }
-    
+
     @staticmethod
     def get_api_status() -> Dict[str, any]:
         """
@@ -100,7 +100,7 @@ class FeatureFlags:
             'has_api_token': bool(os.getenv('FACEBOOK_ACCESS_TOKEN')),
             'has_app_id': bool(os.getenv('FACEBOOK_APP_ID')),
         }
-    
+
     @staticmethod
     def require_for_api() -> bool:
         """
@@ -111,11 +111,11 @@ class FeatureFlags:
         """
         if not FeatureFlags.is_enabled('api_integration'):
             return False
-        
+
         # Check for credentials
         token = os.getenv('FACEBOOK_ACCESS_TOKEN')
         app_id = os.getenv('FACEBOOK_APP_ID')
-        
+
         return bool(token and app_id)
 
 

@@ -3096,7 +3096,7 @@ def init_marketplace_db(db_path: str = "marketplace.db"):
             cur.execute(f"ALTER TABLE marketplace_items ADD COLUMN {col_name} {col_type}")
         except sqlite3.OperationalError:
             pass  # Column already exists
-    
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS logged_in_user (
             id INTEGER PRIMARY KEY,
@@ -3107,7 +3107,7 @@ def init_marketplace_db(db_path: str = "marketplace.db"):
             last_checked TEXT DEFAULT (datetime('now'))
         )
     """)
-    
+
     conn.commit()
     conn.close()
     print(f"✅ Marketplace database initialized: {db_path}")
@@ -3120,20 +3120,20 @@ def get_logged_in_user(driver) -> dict:
     Returns dict with: fb_id, fb_name, fb_username, profile_picture_url
     """
     print("🔐 Detecting logged-in Facebook user...")
-    
+
     try:
         # Go to Facebook home
         driver.get("https://www.facebook.com")
         time.sleep(3)
-        
+
         # Check if logged in
         if "login" in driver.current_url.lower():
             print("  ❌ Not logged into Facebook")
             return None
-        
+
         # Try to get user info from the profile link in nav
         user_info = {}
-        
+
         # Method 1: Find profile link in navigation
         try:
             # Look for the user's profile link
@@ -3144,7 +3144,7 @@ def get_logged_in_user(driver) -> dict:
                     # Navigate to profile to get ID
                     driver.get("https://www.facebook.com/me/")
                     time.sleep(2)
-                    
+
                     # Get the redirected URL which contains ID or username
                     final_url = driver.current_url
                     if "facebook.com/" in final_url:
@@ -3156,13 +3156,13 @@ def get_logged_in_user(driver) -> dict:
                     break
         except Exception as e:
             print(f"  ⚠️ Could not find profile link: {e}")
-        
+
         # Method 2: Get name from page
         try:
             # Go to profile page
             driver.get("https://www.facebook.com/me/")
             time.sleep(2)
-            
+
             # Find the h1 with the user's name
             h1_elements = driver.find_elements(By.TAG_NAME, "h1")
             for h1 in h1_elements:
@@ -3172,7 +3172,7 @@ def get_logged_in_user(driver) -> dict:
                     break
         except Exception as e:
             print(f"  ⚠️ Could not get name: {e}")
-        
+
         # Method 3: Get profile picture
         try:
             # Look for profile picture image
@@ -3184,14 +3184,14 @@ def get_logged_in_user(driver) -> dict:
                     break
         except Exception as e:
             print(f"  ⚠️ Could not get profile picture: {e}")
-        
+
         if user_info.get("fb_name") or user_info.get("fb_username"):
             print(f"  ✅ Logged in as: {user_info.get('fb_name', user_info.get('fb_username', 'Unknown'))}")
             return user_info
         else:
             print("  ⚠️ Could not determine user info")
             return None
-            
+
     except Exception as e:
         print(f"  ❌ Error detecting user: {e}")
         return None

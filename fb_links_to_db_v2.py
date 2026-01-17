@@ -56,7 +56,7 @@ class MetaParser(HTMLParser):
         if tag == "meta":
             prop = attrs.get("property", "")
             content = attrs.get("content", "")
-            
+
             if prop == "og:title" and content:
                 self.og_title = unescape(content.strip())
             elif prop == "og:description" and content:
@@ -81,7 +81,7 @@ def init_db(db_file):
     """Initialize SQLite database with profiles table"""
     conn = sqlite3.connect(db_file)
     cur = conn.cursor()
-    
+
     # Create table matching EXACT spec from requirements
     cur.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
@@ -96,13 +96,13 @@ def init_db(db_file):
             error TEXT
         )
     """)
-    
+
     # Create index for faster duplicate checking
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_input_url 
         ON profiles(input_url)
     """)
-    
+
     conn.commit()
     return conn
 
@@ -143,7 +143,7 @@ def fetch_profile(url, timeout=15):
 
     max_attempts = 3
     base_delay = 2  # seconds
-    
+
     for attempt in range(max_attempts):
         try:
             if HAS_REQUESTS:
@@ -182,7 +182,7 @@ def fetch_profile(url, timeout=15):
 
         except Exception as e:
             error_msg = str(e)
-            
+
             # Check if we should retry
             if attempt < max_attempts - 1:
                 delay = base_delay * (2 ** attempt)  # Exponential backoff
@@ -239,9 +239,9 @@ Examples:
     parser.add_argument('--log-file',
                        default='processing.log',
                        help='Log file path (default: processing.log)')
-    
+
     args = parser.parse_args()
-    
+
     # Setup logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
@@ -253,13 +253,13 @@ Examples:
             logging.StreamHandler(sys.stdout)
         ]
     )
-    
+
     # Validate input file
     input_file = Path(args.input)
     if not input_file.exists():
         logging.error(f"Input file not found: {input_file}")
         sys.exit(1)
-    
+
     # Read URLs from file
     logging.info(f"Reading URLs from {input_file}")
     urls = []
@@ -273,18 +273,18 @@ Examples:
                 urls.append(line)
             else:
                 logging.warning(f"Line {line_num}: Invalid URL format, skipping: {line}")
-    
+
     if not urls:
         logging.error("No valid URLs found in input file")
         sys.exit(1)
-    
+
     logging.info(f"Found {len(urls)} URLs to process")
-    
+
     # Initialize database
     db_file = Path(args.output)
     conn = init_db(db_file)
     cur = conn.cursor()
-    
+
     # Check for duplicates and filter
     urls_to_process = []
     skipped = 0
@@ -294,28 +294,28 @@ Examples:
             skipped += 1
         else:
             urls_to_process.append(url)
-    
+
     if skipped > 0:
         logging.info(f"Skipped {skipped} already-processed URLs")
-    
+
     if not urls_to_process:
         logging.info("No new URLs to process")
         conn.close()
         return
-    
+
     logging.info(f"Processing {len(urls_to_process)} new URLs")
-    
+
     # Process each URL
     success_count = 0
     error_count = 0
-    
+
     for i, url in enumerate(urls_to_process, 1):
         percent = (i / len(urls_to_process)) * 100
         logging.info(f"[{i}/{len(urls_to_process)}] ({percent:.1f}%) Processing: {url}")
-        
+
         # Transform URL
         transformed = transform_url(url)
-        
+
         if not transformed['valid']:
             logging.warning(f"Invalid URL format (not a marketplace URL): {url}")
             # Store as error
@@ -333,15 +333,15 @@ Examples:
             conn.commit()
             error_count += 1
             continue
-        
+
         clean_url = transformed['clean']
         profile_id = transformed['id']
-        
+
         logging.debug(f"Transformed to: {clean_url} (ID: {profile_id})")
-        
+
         # Fetch profile data
         data = fetch_profile(clean_url, timeout=args.timeout)
-        
+
         # Store in database
         cur.execute("""
             INSERT INTO profiles (
@@ -364,9 +364,9 @@ Examples:
             data["fetched_at"],
             data["error"]
         ))
-        
+
         conn.commit()
-        
+
         # Log results
         if data["error"]:
             logging.error(f"Failed: {data['error']}")
@@ -374,13 +374,13 @@ Examples:
         else:
             logging.info(f"Success: Status {data['http_status']}, Title: {data.get('page_title', 'N/A')}")
             success_count += 1
-        
+
         # Rate limiting
         if i < len(urls_to_process):
             time.sleep(args.rate_limit)
-    
+
     conn.close()
-    
+
     # Final summary
     logging.info("=" * 60)
     logging.info("PROCESSING COMPLETE")

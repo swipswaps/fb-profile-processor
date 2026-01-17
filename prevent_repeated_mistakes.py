@@ -49,7 +49,7 @@ class UserIntent:
 
 class IntentDetector:
     """Detects user intent and maps to required actions"""
-    
+
     # Patterns that indicate "show me" intent (not "explain")
     SHOW_ME_PATTERNS = [
         r"where\s+is",
@@ -60,7 +60,7 @@ class IntentDetector:
         r"view",
         r"see\s+the",
     ]
-    
+
     # Patterns that indicate action intent (not explanation)
     ACTION_PATTERNS = [
         r"update",
@@ -72,7 +72,7 @@ class IntentDetector:
         r"make",
         r"change",
     ]
-    
+
     # Patterns that indicate verification intent
     VERIFY_PATTERNS = [
         r"verify",
@@ -81,7 +81,7 @@ class IntentDetector:
         r"does\s+it",
         r"working",
     ]
-    
+
     @classmethod
     def detect_intent(cls, user_message: str) -> UserIntent:
         """
@@ -94,7 +94,7 @@ class IntentDetector:
             UserIntent with required actions
         """
         message_lower = user_message.lower()
-        
+
         # Check for "show me" intent
         if any(re.search(pattern, message_lower) for pattern in cls.SHOW_ME_PATTERNS):
             return UserIntent(
@@ -108,7 +108,7 @@ class IntentDetector:
                 tools_needed=["selenium", "screenshot", "ocr"],
                 success_criteria="User can SEE the thing they asked about"
             )
-        
+
         # Check for action intent
         if any(re.search(pattern, message_lower) for pattern in cls.ACTION_PATTERNS):
             return UserIntent(
@@ -122,7 +122,7 @@ class IntentDetector:
                 tools_needed=["code_execution", "screenshot", "ocr"],
                 success_criteria="Action completed AND verified with proof"
             )
-        
+
         # Check for verification intent
         if any(re.search(pattern, message_lower) for pattern in cls.VERIFY_PATTERNS):
             return UserIntent(
@@ -136,7 +136,7 @@ class IntentDetector:
                 tools_needed=["selenium", "screenshot", "ocr"],
                 success_criteria="Verification shown with evidence"
             )
-        
+
         # Default to explanation (but still check if action is obvious)
         return UserIntent(
             question=user_message,
@@ -149,7 +149,7 @@ class IntentDetector:
 
 class MistakeDetector:
     """Detects when LLM is about to make a repeated mistake"""
-    
+
     # Phrases that indicate LLM is about to explain instead of show
     EXPLAIN_INDICATORS = [
         "to see it",
@@ -160,7 +160,7 @@ class MistakeDetector:
         "select from",
         "navigate to",
     ]
-    
+
     # Phrases that indicate LLM is about to ask instead of do
     ASK_INDICATORS = [
         "would you like me to",
@@ -168,7 +168,7 @@ class MistakeDetector:
         "do you want me to",
         "shall i",
     ]
-    
+
     # Phrases that indicate claims without proof
     CLAIM_INDICATORS = [
         "you should see",
@@ -176,7 +176,7 @@ class MistakeDetector:
         "the dashboard displays",
         "you can see",
     ]
-    
+
     @classmethod
     def detect_mistake(cls, llm_response: str, intent: UserIntent) -> Optional[MistakePattern]:
         """
@@ -190,28 +190,28 @@ class MistakeDetector:
             MistakePattern if detected, None otherwise
         """
         response_lower = llm_response.lower()
-        
+
         # Check for explain instead of show
         if intent.intent_type == "show_me":
             if any(phrase in response_lower for phrase in cls.EXPLAIN_INDICATORS):
                 return MistakePattern.EXPLAIN_INSTEAD_OF_SHOW
-        
+
         # Check for ask instead of do
         if intent.intent_type == "do_action":
             if any(phrase in response_lower for phrase in cls.ASK_INDICATORS):
                 return MistakePattern.ASK_INSTEAD_OF_DO
-        
+
         # Check for claims without proof
         if any(phrase in response_lower for phrase in cls.CLAIM_INDICATORS):
             if "screenshot" not in response_lower and "ocr" not in response_lower:
                 return MistakePattern.CLAIM_WITHOUT_PROOF
-        
+
         return None
 
 
 class ActionEnforcer:
     """Enforces that required actions are actually taken"""
-    
+
     @staticmethod
     def create_action_plan(intent: UserIntent) -> Dict:
         """
@@ -228,7 +228,7 @@ class ActionEnforcer:
             "steps": [],
             "verification": [],
         }
-        
+
         if intent.intent_type == "show_me":
             plan["steps"] = [
                 {
@@ -262,7 +262,7 @@ class ActionEnforcer:
                 "OCR output contains expected text",
                 "Element is visible in screenshot",
             ]
-        
+
         elif intent.intent_type == "do_action":
             plan["steps"] = [
                 {
@@ -292,9 +292,9 @@ class ActionEnforcer:
                 "Screenshot shows feature working",
                 "Verification confirms success",
             ]
-        
+
         return plan
-    
+
     @staticmethod
     def generate_code_template(intent: UserIntent) -> str:
         """
@@ -348,7 +348,7 @@ assert "EXPECTED_TEXT" in text, "Expected text not found in screenshot"
 print("✅ VERIFIED: User can see [ITEM]")
 # Display: code /tmp/proof.png
 '''
-        
+
         elif intent.intent_type == "do_action":
             return '''
 # REQUIRED: Do the action (don't ask permission)
@@ -375,7 +375,7 @@ print("OCR confirms: [VERIFICATION]")
 
 class WorkflowValidator:
     """Validates that complete workflows are executed"""
-    
+
     @staticmethod
     def validate_completion(intent: UserIntent, actions_taken: List[str]) -> Tuple[bool, str]:
         """
@@ -390,23 +390,23 @@ class WorkflowValidator:
         """
         required = set(a.value for a in intent.required_actions)
         taken = set(actions_taken)
-        
+
         missing = required - taken
-        
+
         if missing:
             return False, f"Incomplete workflow. Missing: {', '.join(missing)}"
-        
+
         return True, "Workflow complete"
 
 
 # Example usage and tests
 def test_framework():
     """Test the mistake prevention framework"""
-    
+
     print("=" * 80)
     print("MISTAKE PREVENTION FRAMEWORK TESTS")
     print("=" * 80)
-    
+
     # Test 1: "Where is" question
     print("\n1. Testing 'Where is' question...")
     user_message = "Where is enriched data?"
@@ -414,7 +414,7 @@ def test_framework():
     print(f"   Intent: {intent.intent_type}")
     print(f"   Required actions: {[a.value for a in intent.required_actions]}")
     print(f"   Tools needed: {intent.tools_needed}")
-    
+
     # Test 2: Detect explain-instead-of-show mistake
     print("\n2. Testing mistake detection...")
     bad_response = "Your data is in test_profiles.db. To see it, select from dropdown."
@@ -423,21 +423,21 @@ def test_framework():
         print(f"   ❌ Mistake detected: {mistake.value}")
     else:
         print(f"   ✅ No mistake detected")
-    
+
     # Test 3: Create action plan
     print("\n3. Testing action plan generation...")
     plan = ActionEnforcer.create_action_plan(intent)
     print(f"   Steps: {len(plan['steps'])}")
     for i, step in enumerate(plan['steps'], 1):
         print(f"      {i}. {step['action']}: {step['description']}")
-    
+
     # Test 4: Validate workflow
     print("\n4. Testing workflow validation...")
     incomplete_actions = ["navigate", "screenshot"]  # Missing OCR
     is_complete, message = WorkflowValidator.validate_completion(intent, incomplete_actions)
     print(f"   Complete: {is_complete}")
     print(f"   Message: {message}")
-    
+
     print("\n" + "=" * 80)
     print("✅ All tests complete")
 

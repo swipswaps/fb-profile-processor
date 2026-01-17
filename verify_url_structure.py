@@ -45,10 +45,10 @@ def analyze_profile_page(driver, fb_id: str) -> Dict[str, bool]:
     print(f"\n{'=' * 80}")
     print(f"ANALYZING: {url}")
     print(f"{'=' * 80}\n")
-    
+
     driver.get(url)
     time.sleep(5)
-    
+
     # Check for various data elements
     elements = {
         'profile_name': "//h1",
@@ -62,14 +62,14 @@ def analyze_profile_page(driver, fb_id: str) -> Dict[str, bool]:
         'about_section': "//div[contains(text(), 'About')]",
         'intro_card': "//div[@data-pagelet='ProfileIntroCard']",
     }
-    
+
     results = {}
     for field, xpath in elements.items():
         exists = check_element_exists(driver, xpath, field)
         results[field] = exists
         status = "✓ Found" if exists else "✗ Not found"
         print(f"  {field:20} {status}")
-    
+
     return results
 
 
@@ -88,10 +88,10 @@ def analyze_marketplace_page(driver, fb_id: str) -> Dict[str, bool]:
     print(f"\n{'=' * 80}")
     print(f"ANALYZING: {url}")
     print(f"{'=' * 80}\n")
-    
+
     driver.get(url)
     time.sleep(5)
-    
+
     # Check for various data elements
     elements = {
         'profile_name': "//h1",
@@ -105,14 +105,14 @@ def analyze_marketplace_page(driver, fb_id: str) -> Dict[str, bool]:
         'marketplace_info': "//div[contains(text(), 'Marketplace')]",
         'listings_section': "//div[@aria-label='Listings']",
     }
-    
+
     results = {}
     for field, xpath in elements.items():
         exists = check_element_exists(driver, xpath, field)
         results[field] = exists
         status = "✓ Found" if exists else "✗ Not found"
         print(f"  {field:20} {status}")
-    
+
     return results
 
 
@@ -121,12 +121,12 @@ def compare_results(profile_results: Dict, marketplace_results: Dict):
     print(f"\n{'=' * 80}")
     print(f"COMPARISON: Profile Page vs Marketplace Page")
     print(f"{'=' * 80}\n")
-    
+
     all_fields = sorted(set(profile_results.keys()) | set(marketplace_results.keys()))
-    
+
     print(f"{'Field':<25} {'Profile Page':<15} {'Marketplace Page':<15}")
     print(f"{'-' * 55}")
-    
+
     for field in all_fields:
         profile_status = "✓" if profile_results.get(field) else "✗"
         marketplace_status = "✓" if marketplace_results.get(field) else "✗"
@@ -138,7 +138,7 @@ def generate_recommendations(profile_results: Dict, marketplace_results: Dict):
     print(f"\n{'=' * 80}")
     print(f"RECOMMENDATIONS")
     print(f"{'=' * 80}\n")
-    
+
     # Fields we need for marketplace extraction
     required_fields = [
         'join_date',
@@ -148,16 +148,16 @@ def generate_recommendations(profile_results: Dict, marketplace_results: Dict):
         'seller_badges',
         'profile_picture',
     ]
-    
+
     profile_only = []
     marketplace_only = []
     both = []
     neither = []
-    
+
     for field in required_fields:
         on_profile = profile_results.get(field, False)
         on_marketplace = marketplace_results.get(field, False)
-        
+
         if on_profile and on_marketplace:
             both.append(field)
         elif on_profile and not on_marketplace:
@@ -166,25 +166,25 @@ def generate_recommendations(profile_results: Dict, marketplace_results: Dict):
             marketplace_only.append(field)
         else:
             neither.append(field)
-    
+
     if marketplace_only:
         print(f"✓ MARKETPLACE PAGE REQUIRED for:")
         for field in marketplace_only:
             print(f"    • {field}")
         print()
-    
+
     if profile_only:
         print(f"⚠ PROFILE PAGE REQUIRED for:")
         for field in profile_only:
             print(f"    • {field}")
         print()
-    
+
     if both:
         print(f"ℹ AVAILABLE ON BOTH PAGES:")
         for field in both:
             print(f"    • {field}")
         print()
-    
+
     if neither:
         print(f"✗ NOT FOUND ON EITHER PAGE:")
         for field in neither:
@@ -194,12 +194,12 @@ def generate_recommendations(profile_results: Dict, marketplace_results: Dict):
         print(f"    • Scrolling to load content")
         print(f"    • Clicking tabs/sections")
         print()
-    
+
     # Final recommendation
     print(f"{'=' * 80}")
     print(f"FINAL RECOMMENDATION")
     print(f"{'=' * 80}\n")
-    
+
     if len(marketplace_only) > len(profile_only):
         print(f"✓ PRIMARY URL: https://www.facebook.com/marketplace/profile/{{fb_id}}/")
         print(f"  Reason: Most marketplace-specific fields found here")
@@ -218,9 +218,9 @@ def main():
         print("\nExample:")
         print("  python3 verify_url_structure.py 100024126863464")
         sys.exit(1)
-    
+
     fb_id = sys.argv[1]
-    
+
     # Import Firefox driver creation
     try:
         from selenium_enricher import create_firefox_driver
@@ -228,29 +228,29 @@ def main():
         print("❌ Error: Could not import create_firefox_driver")
         print("   Make sure selenium_enricher.py exists and has the Firefox setup code")
         sys.exit(1)
-    
+
     print(f"\n{'=' * 80}")
     print(f"URL STRUCTURE VERIFICATION")
     print(f"{'=' * 80}")
     print(f"Profile ID: {fb_id}")
     print(f"Purpose: Verify which URL has which data elements")
     print(f"{'=' * 80}\n")
-    
+
     # Create driver
     driver, temp_profile_dir = create_firefox_driver()
     if not driver:
         print("❌ Failed to create Firefox driver")
         sys.exit(1)
-    
+
     try:
         # Analyze both pages
         profile_results = analyze_profile_page(driver, fb_id)
         marketplace_results = analyze_marketplace_page(driver, fb_id)
-        
+
         # Compare and generate recommendations
         compare_results(profile_results, marketplace_results)
         generate_recommendations(profile_results, marketplace_results)
-        
+
     finally:
         driver.quit()
         if temp_profile_dir:

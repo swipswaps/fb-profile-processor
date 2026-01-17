@@ -41,7 +41,7 @@ def create_test_data() -> pd.DataFrame:
             'https://example.com/pic3.jpg'
         ]
     }
-    
+
     return pd.DataFrame(data)
 
 
@@ -49,16 +49,16 @@ def test_csv_export(df: pd.DataFrame) -> bool:
     """Test CSV export"""
     try:
         csv_data = create_csv_download(df)
-        
+
         # Verify it's a string
         assert isinstance(csv_data, str), "CSV should be string"
-        
+
         # Verify it has headers
         assert 'fb_id' in csv_data, "CSV should have headers"
-        
+
         # Verify it has data
         assert 'Kyle' in csv_data, "CSV should have data"
-        
+
         print("✅ CSV export works")
         return True
     except Exception as e:
@@ -70,17 +70,17 @@ def test_excel_export(df: pd.DataFrame) -> bool:
     """Test Excel export"""
     try:
         excel_data = create_excel_download(df)
-        
+
         # Verify it's bytes
         assert isinstance(excel_data, bytes), "Excel should be bytes"
-        
+
         # Verify it's not empty
         assert len(excel_data) > 0, "Excel data should not be empty"
-        
+
         # Verify it starts with Excel signature
         # Excel files start with PK (ZIP format)
         assert excel_data[:2] == b'PK', "Should be valid Excel file"
-        
+
         print("✅ Excel export works")
         return True
     except Exception as e:
@@ -92,19 +92,19 @@ def test_txt_export(df: pd.DataFrame) -> bool:
     """Test Text export"""
     try:
         txt_data = create_txt_download(df)
-        
+
         # Verify it's a string
         assert isinstance(txt_data, str), "Text should be string"
-        
+
         # Verify it has title
         assert 'FACEBOOK MARKETPLACE' in txt_data, "Should have title"
-        
+
         # Verify it has data
         assert 'Kyle' in txt_data, "Should have profile data"
-        
+
         # Verify it has record count
         assert 'Total Records: 3' in txt_data, "Should show record count"
-        
+
         print("✅ Text export works")
         return True
     except Exception as e:
@@ -116,22 +116,22 @@ def test_sql_export(df: pd.DataFrame) -> bool:
     """Test SQL export"""
     try:
         sql_data = create_sql_download(df)
-        
+
         # Verify it's a string
         assert isinstance(sql_data, str), "SQL should be string"
-        
+
         # Verify it has CREATE TABLE
         assert 'CREATE TABLE' in sql_data, "Should have CREATE TABLE"
-        
+
         # Verify it has INSERT statements
         assert 'INSERT INTO' in sql_data, "Should have INSERT statements"
-        
+
         # Verify it has data
         assert 'Kyle' in sql_data, "Should have profile data"
-        
+
         # Verify NULL handling
         assert 'NULL' in sql_data, "Should handle NULL values"
-        
+
         print("✅ SQL export works")
         return True
     except Exception as e:
@@ -143,21 +143,21 @@ def test_json_export(df: pd.DataFrame) -> bool:
     """Test JSON export"""
     try:
         import json
-        
+
         json_data = create_json_download(df)
-        
+
         # Verify it's a string
         assert isinstance(json_data, str), "JSON should be string"
-        
+
         # Verify it's valid JSON
         parsed = json.loads(json_data)
         assert isinstance(parsed, list), "JSON should be array"
         assert len(parsed) == 3, "Should have 3 records"
-        
+
         # Verify structure
         assert 'fb_id' in parsed[0], "Should have fb_id field"
         assert parsed[0]['fb_name'] == 'Kyle', "Should have correct data"
-        
+
         print("✅ JSON export works")
         return True
     except Exception as e:
@@ -242,7 +242,7 @@ def test_export_with_real_db():
             all_ok = False
 
         return all_ok
-        
+
     except Exception as e:
         print(f"\n⚠️  Real DB test failed: {e}")
         return True  # Don't fail overall test
@@ -253,15 +253,15 @@ def main():
     print("=" * 60)
     print("EXPORT FUNCTIONALITY TEST SUITE")
     print("=" * 60)
-    
+
     # Create test data
     print("\n📝 Creating test data...")
     df = create_test_data()
     print(f"   Created DataFrame with {len(df)} rows, {len(df.columns)} columns")
-    
+
     # Run tests
     print("\n🧪 Running export tests...\n")
-    
+
     results = {
         'CSV': test_csv_export(df),
         'Excel': test_excel_export(df),
@@ -269,24 +269,24 @@ def main():
         'SQL': test_sql_export(df),
         'JSON': test_json_export(df)
     }
-    
+
     # Test with real DB if available
     test_export_with_real_db()
-    
+
     # Summary
     print("\n" + "=" * 60)
     print("TEST SUMMARY")
     print("=" * 60)
-    
+
     total = len(results)
     passed = sum(results.values())
-    
+
     for name, result in results.items():
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{name:10} {status}")
-    
+
     print(f"\nTotal: {passed}/{total} tests passed")
-    
+
     if passed == total:
         print("\n✅ All tests passed! Export functionality is working correctly.")
         return 0

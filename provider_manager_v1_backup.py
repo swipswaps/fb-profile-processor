@@ -38,41 +38,41 @@ class ProviderManager:
         profile = manager.enrich_profile('61550649184857')
         manager.cleanup()
     """
-    
+
     def __init__(self, db_path: str = 'facebook_profiles.db'):
         self.db_path = db_path
         self._provider: Optional[DataProvider] = None
         self._config: Optional[FacebookConfig] = None
-    
+
     @property
     def config(self) -> FacebookConfig:
         """Get or create config from environment + database"""
         if self._config is None:
             self._config = self._load_config()
         return self._config
-    
+
     @property
     def provider(self) -> DataProvider:
         """Get or create the active provider"""
         if self._provider is None:
             self._provider = get_provider(self.config)
         return self._provider
-    
+
     def _load_config(self) -> FacebookConfig:
         """Load config from environment, fallback to database"""
         # Start with env-based config
         config = FacebookConfig.from_env()
-        
+
         # Override with database config if available
         try:
             conn = sqlite3.connect(self.db_path)
             cur = conn.cursor()
-            
+
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='provider_config'")
             if cur.fetchone():
                 cur.execute("SELECT config_key, config_value FROM provider_config")
                 db_config = dict(cur.fetchall())
-                
+
                 # Apply database overrides
                 if 'provider_type' in db_config:
                     config.provider_type = db_config['provider_type']
@@ -84,20 +84,20 @@ class ProviderManager:
                     config.cache_ttl = int(db_config['cache_ttl_seconds'])
                 if 'max_requests_per_minute' in db_config:
                     config.max_requests_per_minute = int(db_config['max_requests_per_minute'])
-                    
+
             conn.close()
         except Exception as e:
             logger.warning(f"Could not load database config: {e}")
-        
+
         return config
-    
+
     def enrich_profile(self, fb_id: str) -> Optional[Dict[str, Any]]:
         """
         Enrich a single profile using the configured provider.
         Returns dict compatible with update_profile_in_db().
         """
         profile = self.provider.get_profile(fb_id)
-        
+
         if profile:
             # Convert ProfileData to dict for database update
             return {
@@ -112,11 +112,11 @@ class ProviderManager:
                 'enrichment_status': 'complete',
             }
         return None
-    
+
     def is_available(self) -> bool:
         """Check if provider is ready"""
         return self.provider.is_available()
-    
+
     def get_status(self) -> Dict[str, Any]:
         """Get provider status for display"""
         rate_info = self.provider.get_rate_limit_info()
@@ -128,14 +128,14 @@ class ProviderManager:
             'recommended_delay': rate_info.recommended_delay,
             'api_credentials_configured': self.config.has_api_credentials(),
         }
-    
+
     def cleanup(self):
         """Clean up provider resources"""
         if self._provider:
             if hasattr(self._provider, 'cleanup'):
                 self._provider.cleanup()
             self._provider = None
-    
+
     def reset(self):
         """Reset provider and config (forces reload)"""
         self.cleanup()

@@ -54,7 +54,7 @@ def get_profile_data(db_path: str, fb_id: str) -> Optional[Dict]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    
+
     cursor.execute("""
         SELECT 
             fb_id,
@@ -71,10 +71,10 @@ def get_profile_data(db_path: str, fb_id: str) -> Optional[Dict]:
         FROM profiles
         WHERE fb_id = ?
     """, (fb_id,))
-    
+
     row = cursor.fetchone()
     conn.close()
-    
+
     if row:
         return dict(row)
     return None
@@ -103,7 +103,7 @@ def verify_json_field(field_name: str, value: str) -> bool:
     if not value or value == '':
         print_warning(f"{field_name:30} = NULL (empty JSON)")
         return True  # Empty JSON is acceptable
-    
+
     try:
         parsed = json.loads(value)
         print_success(f"{field_name:30} = {json.dumps(parsed)[:60]}")
@@ -121,23 +121,23 @@ def run_extraction_test(db_path: str, fb_id: str) -> int:
     if not Path(db_path).exists():
         print_failure(f"Database not found: {db_path}")
         return 1
-    
+
     print_header("FACEBOOK MARKETPLACE EXTRACTION TEST")
     print(f"Database: {db_path}")
     print(f"Profile ID: {fb_id}")
-    
+
     # STEP 1: Check BEFORE state
     print_header("STEP 1: BEFORE STATE")
     before_data = get_profile_data(db_path, fb_id)
-    
+
     if not before_data:
         print_failure(f"Profile {fb_id} not found in database")
         return 1
-    
+
     print(f"Profile Name: {before_data.get('fb_name', 'N/A')}")
     print(f"Location: {before_data.get('fb_location_name', 'N/A')}")
     print(f"Last Enriched: {before_data.get('enriched_at', 'Never')}")
-    
+
     # Show BEFORE marketplace data
     print("\nMarketplace Data (BEFORE):")
     for field in ['fb_join_date', 'fb_active_listings_count', 'fb_response_rate',
@@ -147,7 +147,7 @@ def run_extraction_test(db_path: str, fb_id: str) -> int:
             print(f"  {field:30} = {str(value)[:60]}")
         else:
             print(f"  {field:30} = NULL")
-    
+
     # STEP 2: Run enricher (user must do this manually for now)
     print_header("STEP 2: RUN ENRICHER")
     print_warning("MANUAL STEP REQUIRED:")
@@ -155,82 +155,82 @@ def run_extraction_test(db_path: str, fb_id: str) -> int:
     print(f"\n    python3 selenium_enricher.py\n")
     print("Then press ENTER here to continue verification...")
     input()
-    
+
     # STEP 3: Check AFTER state
     print_header("STEP 3: AFTER STATE (VERIFICATION)")
     after_data = get_profile_data(db_path, fb_id)
-    
+
     if not after_data:
         print_failure(f"Profile {fb_id} disappeared from database!")
         return 1
-    
+
     # Verify all fields
     print("\nMarketplace Data (AFTER):")
     passed = 0
     failed = 0
-    
+
     # Required fields
     if check_field("fb_join_date", after_data.get('fb_join_date'), required=True):
         passed += 1
     else:
         failed += 1
-    
+
     if check_field("fb_picture_url", after_data.get('fb_picture_url'), required=True):
         passed += 1
     else:
         failed += 1
-    
+
     # Optional fields (but should be present for active sellers)
     if check_field("fb_active_listings_count", after_data.get('fb_active_listings_count'), required=False):
         passed += 1
-    
+
     if check_field("fb_response_rate", after_data.get('fb_response_rate'), required=False):
         passed += 1
-    
+
     if check_field("fb_response_time", after_data.get('fb_response_time'), required=False):
         passed += 1
-    
+
     if check_field("fb_cover_url", after_data.get('fb_cover_url'), required=False):
         passed += 1
-    
+
     # JSON field
     if verify_json_field("fb_seller_badges", after_data.get('fb_seller_badges', '')):
         passed += 1
     else:
         failed += 1
-    
+
     # STEP 4: Compare BEFORE vs AFTER
     print_header("STEP 4: CHANGES DETECTED")
-    
+
     changes_found = False
     for field in ['fb_join_date', 'fb_active_listings_count', 'fb_response_rate',
                   'fb_response_time', 'fb_seller_badges', 'fb_picture_url', 'fb_cover_url']:
         before_val = before_data.get(field)
         after_val = after_data.get(field)
-        
+
         if before_val != after_val:
             changes_found = True
             print(f"\n{field}:")
             print(f"  BEFORE: {before_val or 'NULL'}")
             print(f"  AFTER:  {after_val or 'NULL'}")
-    
+
     if not changes_found:
         print_warning("No changes detected. Enrichment may not have run.")
-    
+
     # STEP 5: Final verdict
     print_header("TEST RESULTS")
-    
+
     print(f"\nFields Verified: {passed + failed}")
     print_success(f"Passed: {passed}")
     if failed > 0:
         print_failure(f"Failed: {failed}")
-    
+
     # Check if enrichment timestamp was updated
     if after_data.get('enriched_at') != before_data.get('enriched_at'):
         print_success("Enrichment timestamp updated")
     else:
         print_warning("Enrichment timestamp NOT updated")
-    
+
     if failed == 0 and changes_found:
         print(f"\n{GREEN}{'=' * 80}{RESET}")
         print(f"{GREEN}{'✓ EXTRACTION TEST PASSED':^80}{RESET}")
@@ -249,10 +249,10 @@ def main():
         print("\nExample:")
         print("  python3 test_extraction.py test_profiles.db 100024126863464")
         sys.exit(1)
-    
+
     db_path = sys.argv[1]
     fb_id = sys.argv[2]
-    
+
     result = run_extraction_test(db_path, fb_id)
     sys.exit(result)
 

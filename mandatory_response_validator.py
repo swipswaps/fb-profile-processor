@@ -36,7 +36,7 @@ class ValidationResult:
 
 class ResponseValidator:
     """Validates LLM responses before they're sent to user"""
-    
+
     # Critical phrases that indicate violations
     FORBIDDEN_PHRASES = {
         "Rule 27 (Screenshot Claims)": [
@@ -57,7 +57,7 @@ class ResponseValidator:
             r"it'?s located (in|at)",
         ],
     }
-    
+
     # Required elements for different question types
     REQUIRED_ELEMENTS = {
         "where_is": ["navigate", "screenshot", "ocr"],
@@ -67,7 +67,7 @@ class ResponseValidator:
         "fix": ["implement", "test", "verify"],
         "add": ["implement", "test", "verify"],
     }
-    
+
     def __init__(self, user_message: str, llm_response: str, context: Dict = None):
         """
         Initialize validator.
@@ -80,7 +80,7 @@ class ResponseValidator:
         self.user_message = user_message.lower()
         self.llm_response = llm_response.lower()
         self.context = context or {}
-        
+
     def validate(self) -> ValidationResult:
         """
         Validate response against all rules.
@@ -91,53 +91,53 @@ class ResponseValidator:
         violations = []
         corrections = []
         severity = "info"
-        
+
         # Check for forbidden phrases
         phrase_violations = self._check_forbidden_phrases()
         if phrase_violations:
             violations.extend(phrase_violations)
             severity = "critical"
-        
+
         # Check for missing required elements
         element_violations = self._check_required_elements()
         if element_violations:
             violations.extend(element_violations)
             corrections.extend(self._generate_corrections(element_violations))
             severity = "critical"
-        
+
         # Check for screenshot claims without OCR
         screenshot_violations = self._check_screenshot_claims()
         if screenshot_violations:
             violations.extend(screenshot_violations)
             corrections.append("MUST: Take screenshot, run OCR, show output, THEN make claims")
             severity = "critical"
-        
+
         is_valid = len(violations) == 0
-        
+
         return ValidationResult(
             is_valid=is_valid,
             violations=violations,
             required_corrections=corrections,
             blocking_severity=severity
         )
-    
+
     def _check_forbidden_phrases(self) -> List[str]:
         """Check if response contains forbidden phrases"""
         violations = []
-        
+
         for rule, patterns in self.FORBIDDEN_PHRASES.items():
             for pattern in patterns:
                 if re.search(pattern, self.llm_response):
                     violations.append(
                         f"{rule} violation: Found '{pattern}' in response"
                     )
-        
+
         return violations
-    
+
     def _check_required_elements(self) -> List[str]:
         """Check if response has required elements for question type"""
         violations = []
-        
+
         # Determine question type
         question_type = None
         if re.search(r"where\s+is", self.user_message):
@@ -148,57 +148,57 @@ class ResponseValidator:
             question_type = "dont_see"
         elif re.search(r"update|add|fix|implement", self.user_message):
             question_type = "update"
-        
+
         if not question_type:
             return []
-        
+
         # Check for required elements
         required = self.REQUIRED_ELEMENTS.get(question_type, [])
         missing = []
-        
+
         for element in required:
             if element not in self.llm_response:
                 missing.append(element)
-        
+
         if missing:
             violations.append(
                 f"Missing required elements for '{question_type}' question: {', '.join(missing)}"
             )
-        
+
         return violations
-    
+
     def _check_screenshot_claims(self) -> List[str]:
         """Check for screenshot/UI claims without OCR proof"""
         violations = []
-        
+
         # Phrases that make claims about UI
         ui_claim_patterns = [
             r"you (will|should|can) see",
             r"(will|should) display",
             r"shows? (the|a|an)",
         ]
-        
+
         has_ui_claim = any(
             re.search(pattern, self.llm_response)
             for pattern in ui_claim_patterns
         )
-        
+
         if has_ui_claim:
             # Check if OCR is mentioned
             has_ocr = "ocr" in self.llm_response or "pytesseract" in self.llm_response
             has_screenshot = "screenshot" in self.llm_response
-            
+
             if not (has_ocr and has_screenshot):
                 violations.append(
                     "Rule 27 violation: Making UI claims without screenshot + OCR proof"
                 )
-        
+
         return violations
-    
+
     def _generate_corrections(self, violations: List[str]) -> List[str]:
         """Generate specific corrections for violations"""
         corrections = []
-        
+
         for violation in violations:
             if "where_is" in violation or "show_me" in violation:
                 corrections.append(
@@ -208,13 +208,13 @@ class ResponseValidator:
                 corrections.append(
                     "REQUIRED: Implement change → Test → Screenshot → Verify → Report"
                 )
-        
+
         return corrections
 
 
 class AutoCorrector:
     """Automatically corrects responses that fail validation"""
-    
+
     @staticmethod
     def correct_where_is_response(user_message: str) -> str:
         """
@@ -265,7 +265,7 @@ if "EXPECTED_TEXT" in text:
 
 CRITICAL: Do NOT explain where it is. SHOW where it is.
 '''
-    
+
     @staticmethod
     def correct_update_response(user_message: str) -> str:
         """
@@ -327,10 +327,10 @@ def validate_and_correct_response(user_message: str, llm_response: str) -> Tuple
     """
     validator = ResponseValidator(user_message, llm_response)
     result = validator.validate()
-    
+
     if result.is_valid:
         return True, llm_response
-    
+
     # Response is invalid - generate correction
     print("=" * 80)
     print("❌ RESPONSE VALIDATION FAILED")
@@ -342,7 +342,7 @@ def validate_and_correct_response(user_message: str, llm_response: str) -> Tuple
     for correction in result.required_corrections:
         print(f"  • {correction}")
     print("=" * 80)
-    
+
     # Generate corrected response
     if "where is" in user_message.lower() or "show me" in user_message.lower():
         corrected = AutoCorrector.correct_where_is_response(user_message)
@@ -350,37 +350,37 @@ def validate_and_correct_response(user_message: str, llm_response: str) -> Tuple
         corrected = AutoCorrector.correct_update_response(user_message)
     else:
         corrected = llm_response + "\n\n⚠️ VALIDATION WARNING: " + "; ".join(result.violations)
-    
+
     return False, corrected
 
 
 # Integration example
 def example_usage():
     """Example of how to use the validator"""
-    
+
     print("EXAMPLE 1: 'Where is' question")
     print("-" * 80)
-    
+
     user_msg = "Where is enriched data?"
-    
+
     # Bad response (will fail validation)
     bad_response = "Your data is in test_profiles.db. To see it, select from dropdown."
-    
+
     is_valid, response = validate_and_correct_response(user_msg, bad_response)
     print(f"Valid: {is_valid}")
     if not is_valid:
         print("Corrected response:")
         print(response)
-    
+
     print("\n" + "=" * 80)
     print("EXAMPLE 2: 'Update' request")
     print("-" * 80)
-    
+
     user_msg2 = "Update the app to export as SQL"
-    
+
     # Bad response (will fail validation)
     bad_response2 = "Would you like me to integrate SQL export?"
-    
+
     is_valid2, response2 = validate_and_correct_response(user_msg2, bad_response2)
     print(f"Valid: {is_valid2}")
     if not is_valid2:

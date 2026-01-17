@@ -25,10 +25,10 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
     """
     print(f"Migrating database: {db_path}")
     print("=" * 60)
-    
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Get current schema version
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -37,18 +37,18 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
             description TEXT
         )
     """)
-    
+
     cursor.execute("SELECT MAX(version) FROM schema_version")
     current_version = cursor.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] or 0
-    
+
     print(f"Current schema version: {current_version}")
-    
+
     migrations = []
-    
+
     # ========== Migration 1: Add API fields to profiles ==========
     if current_version < 1:
         print("\n[1] Adding API fields to profiles table...")
-        
+
         migrations.append((
             "Add API accessibility tracking",
             """
@@ -57,11 +57,11 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
             ALTER TABLE profiles ADD COLUMN data_source VARCHAR(20) DEFAULT 'scraper';
             """
         ))
-    
+
     # ========== Migration 2: Create API tokens table ==========
     if current_version < 2:
         print("\n[2] Creating api_tokens table...")
-        
+
         migrations.append((
             "Create API tokens table",
             """
@@ -82,11 +82,11 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
             CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(is_active);
             """
         ))
-    
+
     # ========== Migration 3: Create rate limits tracking ==========
     if current_version < 3:
         print("\n[3] Creating api_rate_limits table...")
-        
+
         migrations.append((
             "Create rate limits tracking table",
             """
@@ -104,11 +104,11 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
             CREATE INDEX IF NOT EXISTS idx_rate_limits_measured ON api_rate_limits(measured_at);
             """
         ))
-    
+
     # ========== Migration 4: Create API request log ==========
     if current_version < 4:
         print("\n[4] Creating api_request_log table...")
-        
+
         migrations.append((
             "Create API request logging table",
             """
@@ -129,11 +129,11 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
             CREATE INDEX IF NOT EXISTS idx_request_log_created ON api_request_log(created_at);
             """
         ))
-    
+
     # ========== Migration 5: Create provider config table ==========
     if current_version < 5:
         print("\n[5] Creating provider_config table...")
-        
+
         migrations.append((
             "Create provider configuration table",
             """
@@ -157,7 +157,7 @@ def migrate_database(db_path: str = "facebook_profiles.db"):
                 ('max_requests_per_minute', '30', 'integer', 'Rate limiting threshold');
             """
         ))
-    
+
     # Execute migrations atomically
     try:
         # Begin explicit transaction for atomicity
@@ -225,21 +225,21 @@ def verify_migration(db_path: str = "facebook_profiles.db"):
     print("\n" + "=" * 60)
     print("VERIFICATION")
     print("=" * 60)
-    
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Check for new columns in profiles
     cursor.execute("PRAGMA table_info(profiles)")
     columns = {row[1]: row[2] for row in cursor.fetchall()}
-    
+
     print("\nProfiles table new columns:")
     for col in ['api_accessible', 'api_last_sync', 'data_source']:
         if col in columns:
             print(f"  ✅ {col} ({columns[col]})")
         else:
             print(f"  ❌ {col} MISSING")
-    
+
     # Check for new tables
     cursor.execute("""
         SELECT name FROM sqlite_master 
@@ -250,28 +250,28 @@ def verify_migration(db_path: str = "facebook_profiles.db"):
             'provider_config'
         )
     """)
-    
+
     new_tables = [row[0] for row in cursor.fetchall()]
-    
+
     print("\nNew tables:")
     for table in ['api_tokens', 'api_rate_limits', 'api_request_log', 'provider_config']:
         if table in new_tables:
             print(f"  ✅ {table}")
         else:
             print(f"  ❌ {table} MISSING")
-    
+
     # Show provider config
     print("\nProvider configuration:")
     cursor.execute("SELECT config_key, config_value FROM provider_config ORDER BY config_key")
     for key, value in cursor.fetchall():
         print(f"  {key:30} = {value}")
-    
+
     conn.close()
 
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Migrate database for Facebook API support")
     parser.add_argument(
         '--database',
@@ -283,9 +283,9 @@ if __name__ == "__main__":
         action='store_true',
         help='Only verify migration, do not apply'
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.verify_only:
         verify_migration(args.database)
     else:

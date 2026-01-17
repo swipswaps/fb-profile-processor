@@ -49,17 +49,17 @@ def connect_to_chrome():
 def upgrade_schema(conn):
     """Add enrichment columns to existing database"""
     cur = conn.cursor()
-    
+
     # Check if upgrade needed
     cur.execute("PRAGMA table_info(profiles)")
     columns = [col[1] for col in cur.fetchall()]
-    
+
     if 'enrichment_status' in columns:
         logging.info("Database schema already upgraded")
         return
-    
+
     logging.info("Upgrading database schema for enrichment...")
-    
+
     alterations = [
         "ALTER TABLE profiles ADD COLUMN clean_url TEXT",
         "ALTER TABLE profiles ADD COLUMN profile_id TEXT",
@@ -74,20 +74,20 @@ def upgrade_schema(conn):
         "ALTER TABLE profiles ADD COLUMN browser_error TEXT",
         "ALTER TABLE profiles ADD COLUMN enrichment_status TEXT DEFAULT 'pending'"
     ]
-    
+
     for sql in alterations:
         try:
             cur.execute(sql)
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
                 raise
-    
+
     # Create index
     try:
         cur.execute("CREATE INDEX idx_enrichment_status ON profiles(enrichment_status)")
     except sqlite3.OperationalError:
         pass
-    
+
     # Backfill profile_id and clean_url from existing data
     cur.execute("""
         UPDATE profiles 
@@ -100,13 +100,13 @@ def upgrade_schema(conn):
         WHERE profile_id IS NULL 
         AND input_url LIKE '%/marketplace/profile/%'
     """)
-    
+
     cur.execute("""
         UPDATE profiles 
         SET clean_url = 'https://www.facebook.com/' || profile_id
         WHERE clean_url IS NULL AND profile_id IS NOT NULL
     """)
-    
+
     conn.commit()
     logging.info("✓ Schema upgraded successfully")
 

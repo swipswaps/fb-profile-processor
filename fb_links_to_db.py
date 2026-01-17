@@ -177,7 +177,7 @@ def main():
 
     # Read URLs from file
     urls = [l.strip() for l in INPUT_FILE.read_text().splitlines() if l.strip()]
-    
+
     print(f"[INFO] Found {len(urls)} URLs in {INPUT_FILE}")
 
     # Initialize database
@@ -187,22 +187,22 @@ def main():
     # Process each URL
     for i, url in enumerate(urls, 1):
         print(f"[INFO] Processing {i}/{len(urls)}: {url}")
-        
+
         # Transform URL
         transformed = transform_url(url)
-        
+
         if not transformed['valid']:
             print(f"[WARN] Invalid URL format, skipping: {url}")
             continue
-        
+
         clean_url = transformed['clean']
         profile_id = transformed['id']
-        
+
         print(f"[INFO] Transformed to: {clean_url} (ID: {profile_id})")
-        
+
         # Fetch profile data
         data = fetch_profile(clean_url)
-        
+
         # Store in database
         cur.execute("""
             INSERT INTO profiles (
@@ -229,15 +229,15 @@ def main():
             data.get("fetched_at"),
             data.get("error")
         ))
-        
+
         conn.commit()
-        
+
         # Log results
         if data.get("error"):
             print(f"[ERROR] {data['error']}")
         else:
             print(f"[SUCCESS] Status: {data['http_status']}, Title: {data.get('page_title', 'N/A')}")
-        
+
         # Rate limiting: 1 request per second
         if i < len(urls):
             time.sleep(1)

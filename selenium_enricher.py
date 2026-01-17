@@ -381,7 +381,7 @@ def main():
         print("❌ No profiles to enrich")
         print("   Tip: Use --force to re-enrich profiles with missing marketplace data")
         return
-    
+
     print(f"📊 Found {len(profiles)} profiles to enrich")
     print()
 

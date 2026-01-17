@@ -98,7 +98,7 @@ class ProviderManager:
     def get_schema_version(self) -> int:
         """Get current schema version"""
         return self._schema_version
-    
+
     def _initialize_provider(self):
         """Initialize appropriate provider based on config"""
         try:
@@ -108,24 +108,24 @@ class ProviderManager:
                     self.provider = ScraperProvider(self.config)
                 else:
                     self.provider = GraphAPIProvider(self.config)
-            
+
             elif self.config.provider_type == 'hybrid':
                 scraper = ScraperProvider(self.config)
                 api = GraphAPIProvider(self.config) if self.config.has_api_credentials() else None
                 self.provider = HybridProvider(self.config, scraper, api)
-            
+
             else:  # Default to scraper
                 self.provider = ScraperProvider(self.config)
-            
+
             self._initialized = True
             logger.info(f"Provider initialized: {self.config.provider_type}")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize provider: {e}")
             # Fallback to scraper
             self.provider = ScraperProvider(self.config)
             self._initialized = True
-    
+
     def enrich_profile(self, fb_id: str) -> bool:
         """
         Enrich single profile using configured provider.
@@ -139,21 +139,21 @@ class ProviderManager:
         if not self._initialized:
             logger.error("Provider not initialized")
             return False
-        
+
         try:
             profile_data = self.provider.get_profile(fb_id)
-            
+
             if profile_data:
                 self._save_to_database(profile_data)
                 return True
             else:
                 logger.warning(f"No data retrieved for {fb_id}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Enrichment failed for {fb_id}: {e}")
             return False
-    
+
     def enrich_profiles_batch(self, fb_ids: List[str]) -> Dict[str, bool]:
         """
         Enrich multiple profiles.
@@ -165,27 +165,27 @@ class ProviderManager:
             Dict mapping fb_id to success status
         """
         results = {}
-        
+
         try:
             profiles = self.provider.get_profiles_batch(fb_ids)
-            
+
             # Save all retrieved profiles
             for profile in profiles:
                 self._save_to_database(profile)
                 results[profile.fb_id] = True
-            
+
             # Mark failed ones
             retrieved_ids = {p.fb_id for p in profiles}
             for fb_id in fb_ids:
                 if fb_id not in retrieved_ids:
                     results[fb_id] = False
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Batch enrichment failed: {e}")
             return {fb_id: False for fb_id in fb_ids}
-    
+
     def get_status(self) -> Dict:
         """
         Get provider status.
@@ -237,7 +237,7 @@ class ProviderManager:
                 'schema_version': self._schema_version,
                 'error': str(e)
             }
-    
+
     def reload(self, provider_type: Optional[str] = None):
         """
         Reload provider (useful for switching providers).
@@ -247,13 +247,13 @@ class ProviderManager:
         """
         if provider_type:
             self.config.provider_type = provider_type
-        
+
         # Cleanup old provider
         self.cleanup()
-        
+
         # Reinitialize
         self._initialize_provider()
-    
+
     def cleanup(self):
         """Cleanup provider resources"""
         if self.provider and hasattr(self.provider, 'cleanup'):
@@ -261,9 +261,9 @@ class ProviderManager:
                 self.provider.cleanup()
             except Exception as e:
                 logger.warning(f"Cleanup warning: {e}")
-        
+
         self._initialized = False
-    
+
     def save_api_credentials(self, app_id: str, app_secret: str, access_token: str):
         """
         Save API credentials to database.
@@ -275,14 +275,14 @@ class ProviderManager:
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # Deactivate old tokens
         cursor.execute("""
             UPDATE api_tokens 
             SET is_active = FALSE 
             WHERE token_type = 'page_access'
         """)
-        
+
         # Insert new token
         cursor.execute("""
             INSERT INTO api_tokens (
@@ -294,15 +294,15 @@ class ProviderManager:
             '["pages_messaging", "pages_read_engagement"]',
             f'App ID: {app_id}'
         ))
-        
+
         conn.commit()
         conn.close()
-        
+
         # Update config
         self.config.app_id = app_id
         self.config.app_secret = app_secret
         self.config.access_token = access_token
-    
+
     def test_api_connection(self) -> bool:
         """
         Test API connection.
@@ -312,22 +312,22 @@ class ProviderManager:
         """
         if not self.config.has_api_credentials():
             return False
-        
+
         try:
             api = GraphAPIProvider(self.config)
             return api.is_available()
         except Exception as e:
             logger.error(f"API test failed: {e}")
             return False
-    
+
     def _save_to_database(self, profile: ProfileData):
         """Save profile data to database"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # Convert ProfileData to dict
         data = profile.to_dict()
-        
+
         # Update or insert
         cursor.execute("""
             INSERT OR REPLACE INTO profiles (
@@ -351,7 +351,7 @@ class ProviderManager:
             data['api_accessible'],
             data['acquired_at']
         ))
-        
+
         conn.commit()
         conn.close()
 
@@ -372,7 +372,7 @@ def get_provider_manager() -> ProviderManager:
         ProviderManager instance
     """
     global _provider_manager_instance
-    
+
     # Try Streamlit session state first
     try:
         import streamlit as st
@@ -413,7 +413,7 @@ import atexit
 def cleanup_on_exit():
     """Cleanup providers when program exits"""
     global _provider_manager_instance
-    
+
     if _provider_manager_instance:
         try:
             _provider_manager_instance.cleanup()
@@ -427,15 +427,15 @@ def cleanup_on_exit():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    
+
     # Get manager
     manager = get_provider_manager()
-    
+
     # Show status
     status = manager.get_status()
     print(f"Provider: {status['provider']}")
     print(f"Available: {status['available']}")
-    
+
     # Example enrichment
     # success = manager.enrich_profile('61550649184857')
     # print(f"Enrichment: {'✅' if success else '❌'}")
