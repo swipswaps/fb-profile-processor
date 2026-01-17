@@ -105,6 +105,10 @@ The web interface provides instant URL transformation without any installation!
 git clone https://github.com/swipswaps/fb-profile-processor.git
 cd fb-profile-processor
 
+# Create and activate virtual environment (recommended)
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
 # Install Python dependencies
 pip install -r requirements.txt
 ```

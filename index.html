@@ -405,11 +405,11 @@ cd fb-profile-processor</code>
                 <div id="python-start-commands" class="hidden">
                     <div class="code-box">
                         <button class="copy-btn" onclick="copyCode('start-code-python')">📋 Copy</button>
-                        <code id="start-code-python">pip install -r requirements.txt && streamlit run dashboard.py</code>
+                        <code id="start-code-python">python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && streamlit run dashboard_integrated.py --server.port 8501</code>
                     </div>
 
-                    <div class="alert alert-info">
-                        <strong>💡 Tip:</strong> Use a virtual environment: <code>python -m venv venv && source venv/bin/activate</code>
+                    <div class="alert alert-warning">
+                        <strong>⚠️ Prerequisites:</strong> Enrichment requires Firefox installed, geckodriver on PATH, and logged into Facebook in Firefox.
                     </div>
                 </div>
 

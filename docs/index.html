@@ -77,38 +77,40 @@
             <p class="subtitle">Facebook Marketplace profile URL processor with enrichment</p>
 
             <div class="status-card">
-                <h2>🔌 Connection Status</h2>
+                <h2>🚀 Getting Started</h2>
                 <div class="status offline" id="statusIndicator">
                     <div class="dot offline"></div>
                     <div>
-                        <strong>Streamlit Server Offline</strong>
-                        <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">localhost:8501 not responding</p>
+                        <strong>Streamlit Not Started Yet</strong>
+                        <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Choose an installation method below to get started</p>
                     </div>
                 </div>
                 <p style="color: #a1a1aa; font-size: 0.875rem;">
-                    The full-featured dashboard requires Streamlit to be running. Choose an install option below:
+                    The dashboard runs locally on your machine. Pick Docker (easiest) or Python (advanced):
                 </p>
             </div>
 
             <div class="install-options">
                 <div class="install-option">
                     <h3>🐳 Docker (Recommended)</h3>
-                    <p>One command installs everything including Firefox enrichment.</p>
+                    <p>One command installs everything including Firefox + geckodriver for enrichment.</p>
                     <code>curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash</code>
                     <button onclick="copyToClipboard(this, 'curl -sSL https://raw.githubusercontent.com/swipswaps/fb-profile-processor/main/install.sh | bash')">📋 Copy Install Command</button>
+                    <p style="color: #22c55e; font-size: 0.75rem; margin-top: 0.5rem;">✅ All dependencies handled automatically</p>
                 </div>
                 <div class="install-option">
-                    <h3>🐍 Manual (Python)</h3>
-                    <p>Clone, install dependencies, and run with Python 3.8+.</p>
-                    <code>git clone https://github.com/swipswaps/fb-profile-processor.git && cd fb-profile-processor && pip install -r requirements.txt && streamlit run dashboard.py</code>
-                    <button onclick="copyToClipboard(this, 'git clone https://github.com/swipswaps/fb-profile-processor.git && cd fb-profile-processor && pip install -r requirements.txt && streamlit run dashboard.py')">📋 Copy Command</button>
-                    <button class="secondary" style="margin-top: 0.5rem;" onclick="window.open('https://github.com/swipswaps/fb-profile-processor', '_blank')">📖 View README</button>
+                    <h3>🐍 Python (Advanced)</h3>
+                    <p>For power users. Requires Python 3.8+, Firefox, geckodriver.</p>
+                    <code id="python-cmd">git clone https://github.com/swipswaps/fb-profile-processor.git && cd fb-profile-processor && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && streamlit run dashboard_integrated.py --server.port 8501</code>
+                    <button onclick="copyToClipboard(this, document.getElementById('python-cmd').textContent)">📋 Copy Full Command</button>
+                    <button class="secondary" style="margin-top: 0.5rem;" onclick="window.open('https://github.com/swipswaps/fb-profile-processor#readme', '_blank')">📖 View README</button>
+                    <p style="color: #fbbf24; font-size: 0.75rem; margin-top: 0.5rem;">⚠️ Enrichment requires: Firefox installed, geckodriver on PATH, logged into Facebook in Firefox</p>
                 </div>
             </div>
 
             <div class="retry-section">
-                <button onclick="checkStreamlit()">🔄 Check Again</button>
-                <p>Already started Streamlit? Click to reconnect.</p>
+                <button onclick="checkStreamlit()">🔄 Connect Now</button>
+                <p>Already started Streamlit? Click to connect to your local dashboard.</p>
             </div>
 
             <div class="features">
@@ -118,7 +120,7 @@
                 </div>
                 <div class="feature">
                     <h4>🦊 Firefox Enrichment</h4>
-                    <p>Extract names, photos, bios using your FB login</p>
+                    <p>Extract names, photos, bios (requires Firefox + geckodriver + FB login)</p>
                 </div>
                 <div class="feature">
                     <h4>💾 SQLite Database</h4>
@@ -239,12 +241,24 @@
                         indicator.innerHTML = `
                             <div class="dot online"></div>
                             <div>
-                                <strong>Streamlit Server Detected!</strong>
-                                <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Click "Check Again" to connect</p>
+                                <strong>Streamlit Server Running!</strong>
+                                <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Click "Connect Now" to open the dashboard</p>
                             </div>
                         `;
                     })
-                    .catch(() => {});
+                    .catch(() => {
+                        // Still not running - ensure instructional messaging
+                        const indicator = document.getElementById('statusIndicator');
+                        if (!indicator.classList.contains('online')) {
+                            indicator.innerHTML = `
+                                <div class="dot offline"></div>
+                                <div>
+                                    <strong>Streamlit Not Started Yet</strong>
+                                    <p style="color: #a1a1aa; font-size: 0.8rem; margin: 0;">Run the installation command above to start</p>
+                                </div>
+                            `;
+                        }
+                    });
             }
         }, 5000);
     </script>
