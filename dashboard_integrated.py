@@ -2488,16 +2488,148 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                                     with col:
                                         render_listing_card(row)
 
-                # Export option
+                # =============================================================
+                # EXPORT LISTINGS - Unified export matching Profiles tab
+                # REGRESSION GUARD: All 5 formats must be available (.txt, .csv, .xlsx, .json, .sql)
+                # Uses shared export_functionality.py infrastructure
+                # =============================================================
                 st.markdown("---")
-                if st.button("📥 Export Listings to CSV", help="Download all listings as CSV"):
-                    csv = items_df.to_csv(index=False)
-                    st.download_button(
-                        "⬇️ Download CSV",
-                        csv,
-                        "my_marketplace_listings.csv",
-                        "text/csv"
+                st.subheader("📥 Export Listings")
+
+                if items_df.empty:
+                    st.info("No listings to export.")
+                else:
+                    # Import shared export functions
+                    from export_functionality import (
+                        create_txt_download, create_csv_download, create_excel_download,
+                        create_json_download, create_sql_download
                     )
+
+                    # Export format selection (matches Profiles tab UX)
+                    col_fmt, col_opts = st.columns([2, 1])
+
+                    with col_fmt:
+                        export_format = st.radio(
+                            "Export Format",
+                            ['CSV', 'JSON', 'Excel (.xlsx)', 'Text (.txt)', 'SQL (.sql)', 'ZIP with Images'],
+                            horizontal=True,
+                            key="mp_export_format"
+                        )
+
+                    with col_opts:
+                        st.markdown(f"**{len(items_df)} listings** to export")
+
+                    # Generate timestamp for filenames
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+                    # Export buttons per format
+                    if export_format == 'CSV':
+                        csv_data = create_csv_download(items_df)
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv_data,
+                            file_name=f"marketplace_listings_{timestamp}.csv",
+                            mime="text/csv",
+                            key="mp_dl_csv"
+                        )
+
+                    elif export_format == 'JSON':
+                        json_data = create_json_download(items_df)
+                        st.download_button(
+                            label="📥 Download JSON",
+                            data=json_data,
+                            file_name=f"marketplace_listings_{timestamp}.json",
+                            mime="application/json",
+                            key="mp_dl_json"
+                        )
+                        with st.expander("🔧 Preview JSON"):
+                            preview = json_data[:1500] + "\n..." if len(json_data) > 1500 else json_data
+                            st.code(preview, language="json")
+
+                    elif export_format == 'Excel (.xlsx)':
+                        try:
+                            excel_data = create_excel_download(items_df)
+                            st.download_button(
+                                label="📥 Download Excel",
+                                data=excel_data,
+                                file_name=f"marketplace_listings_{timestamp}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="mp_dl_xlsx"
+                            )
+                        except Exception as e:
+                            st.error(f"Excel export failed: {e}. Install openpyxl: pip install openpyxl")
+
+                    elif export_format == 'Text (.txt)':
+                        txt_data = create_txt_download(items_df)
+                        st.download_button(
+                            label="📥 Download TXT",
+                            data=txt_data,
+                            file_name=f"marketplace_listings_{timestamp}.txt",
+                            mime="text/plain",
+                            key="mp_dl_txt"
+                        )
+                        with st.expander("📄 Preview TXT"):
+                            preview = txt_data[:1500] + "\n..." if len(txt_data) > 1500 else txt_data
+                            st.code(preview, language="text")
+
+                    elif export_format == 'SQL (.sql)':
+                        sql_data = create_sql_download(items_df, table_name="marketplace_listings")
+                        st.download_button(
+                            label="📥 Download SQL",
+                            data=sql_data,
+                            file_name=f"marketplace_listings_{timestamp}.sql",
+                            mime="text/plain",
+                            key="mp_dl_sql"
+                        )
+                        with st.expander("💾 Preview SQL"):
+                            preview = sql_data[:1500] + "\n..." if len(sql_data) > 1500 else sql_data
+                            st.code(preview, language="sql")
+
+                    elif export_format == 'ZIP with Images':
+                        st.info("Creating ZIP file with listings data and images...")
+
+                        # Create ZIP
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                            # Add all formats
+                            zf.writestr('listings.csv', create_csv_download(items_df))
+                            zf.writestr('listings.json', create_json_download(items_df))
+                            zf.writestr('listings.txt', create_txt_download(items_df))
+                            zf.writestr('listings.sql', create_sql_download(items_df, table_name="marketplace_listings"))
+
+                            # Add images from marketplace_images folder
+                            images_dir = Path('marketplace_images')
+                            images_added = 0
+                            if images_dir.exists():
+                                for img_file in images_dir.glob('*'):
+                                    if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
+                                        zf.write(img_file, f'images/{img_file.name}')
+                                        images_added += 1
+
+                            # Add README
+                            readme = f"""Marketplace Listings Export
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Contents:
+- listings.csv: Listings data in CSV format
+- listings.json: Listings data in JSON format
+- listings.txt: Listings data in formatted text
+- listings.sql: SQL INSERT statements for marketplace_listings table
+- images/: Listing images ({images_added} images)
+
+Total Listings: {len(items_df)}
+"""
+                            zf.writestr('README.txt', readme)
+
+                        st.success(f"✅ ZIP created with {images_added} images")
+
+                        st.download_button(
+                            label="📥 Download ZIP",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"marketplace_listings_{timestamp}.zip",
+                            mime="application/zip",
+                            key="mp_dl_zip"
+                        )
 
     # ========== TAB 8: API Config ==========
     if current_tab_index == 7:
