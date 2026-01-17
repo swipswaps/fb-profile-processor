@@ -2298,14 +2298,20 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                 # View mode toggle
                 view_mode = st.radio("View", ["📋 Table", "🃏 Cards"], horizontal=True, label_visibility="collapsed")
 
-                # Filter options
-                col1, col2 = st.columns(2)
+                # Filter options - RESTORED: search + status + sort
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    # Use selectbox for status filter (instant, no Enter needed)
+                    search = st.text_input("🔍 Search", placeholder="Type to filter by title...", key="mp_search", label_visibility="collapsed")
+                with col2:
+                    # Status dropdown (instant filter, no Enter needed)
                     status_options = ["All"] + sorted(items_df['status'].dropna().unique().tolist()) if 'status' in items_df.columns else ["All"]
                     status_filter = st.selectbox("📋 Status", status_options, key="mp_status_filter", label_visibility="collapsed")
-                with col2:
+                with col3:
                     sort_by = st.selectbox("Sort by", ["Newest", "Price (Low)", "Price (High)", "Title"], key="mp_sort")
+
+                # Apply search filter (requires Enter - Streamlit limitation)
+                if search and not items_df.empty:
+                    items_df = items_df[items_df['title'].str.contains(search, case=False, na=False)]
 
                 # Apply status filter (instant, no Enter needed)
                 if status_filter and status_filter != "All" and not items_df.empty:
@@ -2428,11 +2434,11 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                                 if item.get('item_url'):
                                     st.link_button("🔗 View on Facebook", item['item_url'])
                     else:
-                        st.info("No listings match your filter")
+                        st.info("No listings match your search/filter")
                 else:
                     # CARDS VIEW - Visual grid with thumbnails using render_listing_card
                     if items_df.empty:
-                        st.info("No listings match your filter")
+                        st.info("No listings match your search/filter")
                     else:
                         # Display as 3-column grid using render_listing_card
                         cols_per_row = 3
