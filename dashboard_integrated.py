@@ -749,7 +749,7 @@ def main():
     # Title
     st.title("🔗 Facebook Profile Processor - Full Dashboard")
     st.markdown("Upload URLs, process profiles, manage data, and export with images")
-    
+
     # Sidebar - Database selection
     st.sidebar.header("⚙️ Database")
 
@@ -823,7 +823,7 @@ def main():
             st.sidebar.error("❌ Unknown schema")
 
     st.session_state.selected_db = selected_db
-    
+
     # Initialize database if it doesn't exist
     if not Path(selected_db).exists():
         processor.init_db(selected_db)
@@ -1595,106 +1595,119 @@ def main():
         if df.empty:
             st.info("No data to export.")
         else:
+            # =============================================================
+            # EXPORT PROFILES - receipts-ocr pattern: tabs + instant preview
+            # REGRESSION GUARD: All 6 formats must be available (.txt, .csv, .xlsx, .json, .sql, ZIP)
+            # Pattern: Horizontal tabs, preview ALWAYS visible, NO truncation
+            # =============================================================
             st.markdown("Export your data in various formats, optionally including profile images.")
 
-            # Export options
+            # Options row
             col1, col2 = st.columns(2)
-
             with col1:
-                export_format = st.radio(
-                    "Export Format",
-                    ['CSV', 'JSON', 'Excel', 'Text (.txt)', 'SQL (.sql)', 'ZIP with Images']
-                )
-
+                include_all = st.checkbox("Include all records", value=True, key="prof_include_all")
             with col2:
-                include_all = st.checkbox("Include all records", value=True)
                 if not include_all:
                     st.info("Will export only filtered data from 'View Data' tab")
 
             # Prepare export data
             export_df = df if include_all else filtered_df if 'filtered_df' in locals() else df
 
-            st.markdown("---")
-            st.subheader("Export Preview")
-            st.write(f"**Records to export:** {len(export_df)}")
-            st.write(f"**Columns:** {len(export_df.columns)}")
-            st.dataframe(export_df.head(3), width="stretch")
+            st.markdown(f"**{len(export_df)} profiles** ready to export")
 
-            st.markdown("---")
-
-            # Export buttons
+            # Generate timestamp for filenames
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-            if export_format == 'CSV':
-                csv = export_df.to_csv(index=False)
+            # Import shared export functions
+            from export_functionality import (
+                create_txt_download, create_csv_download, create_excel_download,
+                create_json_download, create_sql_download
+            )
+
+            # TABS for format selection (receipts-ocr pattern: instant switch)
+            tab_csv, tab_json, tab_xlsx, tab_txt, tab_sql, tab_zip = st.tabs([
+                "📊 CSV", "🔧 JSON", "📗 Excel", "📄 Text", "🗄️ SQL", "📦 ZIP"
+            ])
+
+            with tab_csv:
+                csv_data = create_csv_download(export_df)
                 st.download_button(
                     label="📥 Download CSV",
-                    data=csv,
+                    data=csv_data,
                     file_name=f"fb_profiles_{timestamp}.csv",
-                    mime="text/csv"
+                    mime="text/csv",
+                    key="prof_dl_csv"
                 )
+                # INSTANT PREVIEW - actual CSV text with commas
+                st.markdown("**Preview (comma-separated values):**")
+                st.text_area("CSV Output", csv_data, height=300, key="prof_csv_preview")
 
-            elif export_format == 'JSON':
-                json_str = export_df.to_json(orient='records', indent=2)
+            with tab_json:
+                json_data = create_json_download(export_df)
                 st.download_button(
                     label="📥 Download JSON",
-                    data=json_str,
+                    data=json_data,
                     file_name=f"fb_profiles_{timestamp}.json",
-                    mime="application/json"
+                    mime="application/json",
+                    key="prof_dl_json"
                 )
+                # INSTANT PREVIEW - full JSON, scrollable textarea
+                st.markdown("**Preview:**")
+                st.text_area("JSON Output", json_data, height=300, key="prof_json_preview")
 
-            elif export_format == 'Excel':
+            with tab_xlsx:
                 try:
-                    buffer = io.BytesIO()
-                    export_df.to_excel(buffer, index=False, engine='openpyxl')
+                    excel_data = create_excel_download(export_df)
                     st.download_button(
                         label="📥 Download Excel",
-                        data=buffer.getvalue(),
+                        data=excel_data,
                         file_name=f"fb_profiles_{timestamp}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="prof_dl_xlsx"
                     )
-                except ImportError:
-                    st.error("Install openpyxl: pip install openpyxl")
+                    # INSTANT PREVIEW - table view
+                    st.markdown("**Preview:**")
+                    st.dataframe(export_df, use_container_width=True, height=300)
+                except Exception as e:
+                    st.error(f"Excel export failed: {e}. Install openpyxl: pip install openpyxl")
 
-            elif export_format == 'Text (.txt)':
-                from export_functionality import create_txt_download
+            with tab_txt:
                 txt_data = create_txt_download(export_df)
                 st.download_button(
                     label="📥 Download TXT",
                     data=txt_data,
                     file_name=f"fb_profiles_{timestamp}.txt",
-                    mime="text/plain"
+                    mime="text/plain",
+                    key="prof_dl_txt"
                 )
-                with st.expander("📄 Preview TXT"):
-                    preview = txt_data[:1500] + "\n..." if len(txt_data) > 1500 else txt_data
-                    st.code(preview, language="text")
+                # INSTANT PREVIEW - full text, scrollable textarea
+                st.markdown("**Preview:**")
+                st.text_area("Text Output", txt_data, height=300, key="prof_txt_preview")
 
-            elif export_format == 'SQL (.sql)':
-                from export_functionality import create_sql_download
+            with tab_sql:
                 sql_data = create_sql_download(export_df, table_name="facebook_profiles")
                 st.download_button(
                     label="📥 Download SQL",
                     data=sql_data,
                     file_name=f"fb_profiles_{timestamp}.sql",
-                    mime="text/plain"
+                    mime="text/plain",
+                    key="prof_dl_sql"
                 )
-                with st.expander("💾 Preview SQL"):
-                    preview = sql_data[:1500] + "\n..." if len(sql_data) > 1500 else sql_data
-                    st.code(preview, language="sql")
+                # INSTANT PREVIEW - full SQL, scrollable textarea
+                st.markdown("**Preview:**")
+                st.text_area("SQL Output", sql_data, height=300, key="prof_sql_preview")
 
-            elif export_format == 'ZIP with Images':
-                st.info("Creating ZIP file with data and images...")
+            with tab_zip:
+                st.markdown("**ZIP includes all formats + profile images**")
 
                 # Create ZIP
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    # Add CSV data
-                    csv_data = export_df.to_csv(index=False)
-                    zf.writestr('profiles.csv', csv_data)
-
-                    # Add JSON data
-                    json_data = export_df.to_json(orient='records', indent=2)
-                    zf.writestr('profiles.json', json_data)
+                    # Add all 5 formats (using shared module)
+                    zf.writestr('profiles.csv', create_csv_download(export_df))
+                    zf.writestr('profiles.json', create_json_download(export_df))
+                    zf.writestr('profiles.txt', create_txt_download(export_df))
+                    zf.writestr('profiles.sql', create_sql_download(export_df, table_name="facebook_profiles"))
 
                     # Add images from local storage first
                     images_dir = Path('profile_images')
@@ -1747,6 +1760,8 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Contents:
 - profiles.csv: Profile data in CSV format
 - profiles.json: Profile data in JSON format
+- profiles.txt: Profile data in formatted text
+- profiles.sql: SQL INSERT statements for facebook_profiles table
 - images/: Profile pictures ({total_images} images)
   - From local storage: {local_images_added}
   - Downloaded from URLs: {downloaded_images}
@@ -1759,14 +1774,25 @@ Image Sources:
 """
                     zf.writestr('README.txt', readme)
 
-                st.success(f"✅ ZIP created with {total_images} images ({local_images_added} local + {downloaded_images} downloaded)")
+                st.success(f"✅ ZIP ready with {total_images} images ({local_images_added} local + {downloaded_images} downloaded)")
 
                 st.download_button(
                     label="📥 Download ZIP",
                     data=zip_buffer.getvalue(),
                     file_name=f"fb_profiles_{timestamp}.zip",
-                    mime="application/zip"
+                    mime="application/zip",
+                    key="prof_dl_zip"
                 )
+
+                # INSTANT PREVIEW - show what's in ZIP
+                st.markdown("**Contents:**")
+                st.markdown(f"""
+                - `profiles.csv` - CSV format
+                - `profiles.json` - JSON format
+                - `profiles.txt` - Text format
+                - `profiles.sql` - SQL INSERT statements
+                - `images/` - {total_images} profile images
+                """)
 
     # ========== TAB 6: Settings & API Config ==========
     if current_tab_index == 5:

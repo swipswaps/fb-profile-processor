@@ -30,10 +30,10 @@ def create_excel_download(df: pd.DataFrame, filename: str = "export.xlsx") -> by
         Bytes of Excel file
     """
     output = BytesIO()
-    
+
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Profiles')
-        
+
         # Auto-adjust column widths
         worksheet = writer.sheets['Profiles']
         for idx, col in enumerate(df.columns):
@@ -42,7 +42,7 @@ def create_excel_download(df: pd.DataFrame, filename: str = "export.xlsx") -> by
                 len(col)
             )
             worksheet.column_dimensions[chr(65 + idx)].width = min(max_length + 2, 50)
-    
+
     return output.getvalue()
 
 
@@ -70,12 +70,12 @@ def create_txt_download(df: pd.DataFrame) -> str:
         Formatted text string
     """
     output = StringIO()
-    
+
     # Header
     output.write("=" * 80 + "\n")
     output.write("FACEBOOK MARKETPLACE PROFILES EXPORT\n")
     output.write("=" * 80 + "\n\n")
-    
+
     # Records
     for idx, row in df.iterrows():
         output.write(f"--- Profile {idx + 1} ---\n")
@@ -84,11 +84,11 @@ def create_txt_download(df: pd.DataFrame) -> str:
             if pd.notna(value):
                 output.write(f"{col:30} : {value}\n")
         output.write("\n")
-    
+
     output.write("=" * 80 + "\n")
     output.write(f"Total Records: {len(df)}\n")
     output.write("=" * 80 + "\n")
-    
+
     return output.getvalue()
 
 
@@ -104,15 +104,15 @@ def create_sql_download(df: pd.DataFrame, table_name: str = "profiles") -> str:
         SQL string
     """
     output = StringIO()
-    
+
     # Header comment
     output.write(f"-- Facebook Marketplace Profiles Export\n")
     output.write(f"-- Generated: {pd.Timestamp.now()}\n")
     output.write(f"-- Records: {len(df)}\n\n")
-    
+
     # Create table statement
     output.write(f"CREATE TABLE IF NOT EXISTS {table_name} (\n")
-    
+
     column_defs = []
     for col, dtype in df.dtypes.items():
         if dtype == 'int64':
@@ -122,15 +122,15 @@ def create_sql_download(df: pd.DataFrame, table_name: str = "profiles") -> str:
         else:
             sql_type = "TEXT"
         column_defs.append(f"    {col} {sql_type}")
-    
+
     output.write(",\n".join(column_defs))
     output.write("\n);\n\n")
-    
+
     # Insert statements
     for idx, row in df.iterrows():
         columns = ", ".join(df.columns)
         values = []
-        
+
         for val in row:
             if pd.isna(val):
                 values.append("NULL")
@@ -140,10 +140,10 @@ def create_sql_download(df: pd.DataFrame, table_name: str = "profiles") -> str:
                 # Escape single quotes
                 escaped = str(val).replace("'", "''")
                 values.append(f"'{escaped}'")
-        
+
         values_str = ", ".join(values)
         output.write(f"INSERT INTO {table_name} ({columns}) VALUES ({values_str});\n")
-    
+
     return output.getvalue()
 
 
@@ -176,15 +176,15 @@ def render_export_section(
     if not selected_rows:
         st.info("Select one or more rows to enable export")
         return
-    
+
     # Filter to selected rows
     export_df = df.iloc[selected_rows].reset_index(drop=True)
-    
+
     st.markdown(f"### Export {len(selected_rows)} Selected Profile(s)")
-    
+
     # Create columns for export buttons
     col1, col2, col3, col4, col5 = st.columns(5)
-    
+
     with col1:
         # CSV export
         csv_data = create_csv_download(export_df)
@@ -196,7 +196,7 @@ def render_export_section(
             key=f"{key_prefix}_csv",
             help="Export as Comma-Separated Values"
         )
-    
+
     with col2:
         # Excel export
         excel_data = create_excel_download(export_df)
@@ -208,7 +208,7 @@ def render_export_section(
             key=f"{key_prefix}_xlsx",
             help="Export as Excel spreadsheet"
         )
-    
+
     with col3:
         # Text export
         txt_data = create_txt_download(export_df)
@@ -220,7 +220,7 @@ def render_export_section(
             key=f"{key_prefix}_txt",
             help="Export as formatted text"
         )
-    
+
     with col4:
         # SQL export
         sql_data = create_sql_download(export_df)
@@ -232,7 +232,7 @@ def render_export_section(
             key=f"{key_prefix}_sql",
             help="Export as SQL INSERT statements"
         )
-    
+
     with col5:
         # JSON export
         json_data = create_json_download(export_df)
@@ -244,7 +244,7 @@ def render_export_section(
             key=f"{key_prefix}_json",
             help="Export as JSON"
         )
-    
+
     # Preview section
     with st.expander("📋 Preview Export Data"):
         st.dataframe(export_df, use_container_width=True)
@@ -270,28 +270,28 @@ def render_selectable_table(
         key=f"{key_prefix}_select_all",
         help="Select/deselect all rows"
     )
-    
+
     # Initialize session state for selections
     if f"{key_prefix}_selections" not in st.session_state:
         st.session_state[f"{key_prefix}_selections"] = set()
-    
+
     # Handle select all
     if select_all:
         st.session_state[f"{key_prefix}_selections"] = set(range(len(df)))
-    
+
     # Create table with checkboxes
     selected_rows = []
-    
+
     # Header row
     cols = st.columns([0.5] + [2] * len(df.columns))
     cols[0].markdown("**Select**")
     for i, col_name in enumerate(df.columns, 1):
         cols[i].markdown(f"**{col_name}**")
-    
+
     # Data rows
     for idx, row in df.iterrows():
         cols = st.columns([0.5] + [2] * len(df.columns))
-        
+
         # Checkbox
         is_selected = cols[0].checkbox(
             "",
@@ -299,13 +299,13 @@ def render_selectable_table(
             key=f"{key_prefix}_row_{idx}",
             label_visibility="collapsed"
         )
-        
+
         if is_selected:
             st.session_state[f"{key_prefix}_selections"].add(idx)
             selected_rows.append(idx)
         elif idx in st.session_state[f"{key_prefix}_selections"]:
             st.session_state[f"{key_prefix}_selections"].remove(idx)
-        
+
         # Data columns
         for i, (col_name, value) in enumerate(row.items(), 1):
             # Truncate long values
@@ -313,7 +313,7 @@ def render_selectable_table(
             if len(str(value)) > 50:
                 display_value += "..."
             cols[i].text(display_value)
-    
+
     return selected_rows
 
 
@@ -328,7 +328,7 @@ def get_profiles_from_db(db_path: str = "test_profiles.db") -> pd.DataFrame:
         DataFrame with profile data
     """
     conn = sqlite3.connect(db_path)
-    
+
     query = """
         SELECT 
             fb_id,
@@ -345,10 +345,10 @@ def get_profiles_from_db(db_path: str = "test_profiles.db") -> pd.DataFrame:
         FROM profiles
         ORDER BY enriched_at DESC
     """
-    
+
     df = pd.read_sql_query(query, conn)
     conn.close()
-    
+
     return df
 
 
@@ -360,38 +360,38 @@ def main():
         page_icon="📊",
         layout="wide"
     )
-    
+
     st.title("📊 Facebook Marketplace Profile Viewer")
     st.markdown("Select profiles to export in various formats")
-    
+
     # Load data
     try:
         df = get_profiles_from_db()
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return
-    
+
     if df.empty:
         st.warning("No profiles found in database")
         return
-    
+
     # Statistics
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Profiles", len(df))
     col2.metric("With Active Listings", df['fb_active_listings_count'].notna().sum())
     col3.metric("With Response Rate", df['fb_response_rate'].notna().sum())
-    
+
     st.markdown("---")
-    
+
     # Display table with selection
     st.markdown("### Select Profiles to Export")
     selected_rows = render_selectable_table(df)
-    
+
     st.markdown("---")
-    
+
     # Export section
     render_export_section(df, selected_rows)
-    
+
     # Summary
     if selected_rows:
         st.success(f"✅ {len(selected_rows)} profile(s) selected for export")
