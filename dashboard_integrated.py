@@ -2524,9 +2524,9 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                             mime="text/csv",
                             key="mp_dl_csv"
                         )
-                        # INSTANT PREVIEW - full content, scrollable dataframe
-                        st.markdown("**Preview:**")
-                        st.dataframe(items_df, use_container_width=True, height=300)
+                        # INSTANT PREVIEW - actual CSV text with commas (not dataframe)
+                        st.markdown("**Preview (comma-separated values):**")
+                        st.text_area("CSV Output", csv_data, height=300, key="mp_csv_preview")
 
                     with tab_json:
                         json_data = create_json_download(items_df)
