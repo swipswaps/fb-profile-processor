@@ -23,6 +23,16 @@ import logging
 import time
 import sys
 
+# Live search component (keystroke-based - Streamlit native text_input requires Enter)
+# REGRESSION GUARD: Do NOT replace with st.text_input - it cannot do live filtering
+# See: https://github.com/m-wrzr/streamlit-searchbox
+try:
+    from streamlit_searchbox import st_searchbox
+    LIVE_SEARCH_AVAILABLE = True
+except ImportError:
+    LIVE_SEARCH_AVAILABLE = False
+    logging.warning("streamlit-searchbox not installed - falling back to Enter-based search")
+
 # ======================
 # LOGGING CONFIGURATION
 # ======================
@@ -2298,10 +2308,46 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                 # View mode toggle
                 view_mode = st.radio("View", ["📋 Table", "🃏 Cards"], horizontal=True, label_visibility="collapsed")
 
-                # Filter options - RESTORED: search + status + sort
+                # =============================================================
+                # FILTER OPTIONS: search + status + sort
+                # REGRESSION GUARD: All three filters must exist and compose together.
+                # Do NOT remove any filter. Do NOT replace live search with st.text_input.
+                # Streamlit's native text_input requires Enter - it CANNOT do live filtering.
+                # =============================================================
                 col1, col2, col3 = st.columns(3)
+
+                # LIVE SEARCH (keystroke-based using streamlit-searchbox)
+                # This is the ONLY way to get live filtering in Streamlit.
+                # st.text_input requires Enter and shows "Press Enter to apply" - unacceptable.
                 with col1:
-                    search = st.text_input("🔍 Search", placeholder="Type to filter by title...", key="mp_search", label_visibility="collapsed")
+                    if LIVE_SEARCH_AVAILABLE:
+                        # Build search options from titles
+                        all_titles = items_df['title'].dropna().unique().tolist() if 'title' in items_df.columns else []
+
+                        def search_titles(query: str) -> list:
+                            """Return matching titles for live search dropdown."""
+                            if not query:
+                                return []
+                            matches = [t for t in all_titles if query.lower() in str(t).lower()]
+                            return matches[:10]  # Limit to 10 suggestions
+
+                        search = st_searchbox(
+                            search_titles,
+                            key="mp_live_search",
+                            placeholder="🔍 Type to filter...",
+                            clear_on_submit=False,
+                            default=None
+                        )
+                    else:
+                        # Fallback: native text_input (requires Enter - documented limitation)
+                        search = st.text_input(
+                            "🔍 Search",
+                            placeholder="Type + Enter to filter...",
+                            key="mp_search",
+                            label_visibility="collapsed",
+                            help="⚠️ Streamlit limitation: Press Enter to apply filter"
+                        )
+
                 with col2:
                     # Status dropdown (instant filter, no Enter needed)
                     status_options = ["All"] + sorted(items_df['status'].dropna().unique().tolist()) if 'status' in items_df.columns else ["All"]
@@ -2309,9 +2355,9 @@ export FACEBOOK_ACCESS_TOKEN=your_token
                 with col3:
                     sort_by = st.selectbox("Sort by", ["Newest", "Price (Low)", "Price (High)", "Title"], key="mp_sort")
 
-                # Apply search filter (requires Enter - Streamlit limitation)
+                # Apply search filter (live if searchbox available, else on Enter)
                 if search and not items_df.empty:
-                    items_df = items_df[items_df['title'].str.contains(search, case=False, na=False)]
+                    items_df = items_df[items_df['title'].str.contains(str(search), case=False, na=False)]
 
                 # Apply status filter (instant, no Enter needed)
                 if status_filter and status_filter != "All" and not items_df.empty:
