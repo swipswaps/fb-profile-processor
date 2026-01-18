@@ -639,6 +639,460 @@ def get_state_progress(state: FacebookAPIState) -> dict:
 
 
 # =============================================================================
+# MANUAL VERIFICATION STATES (VERIFIED-BY-HUMAN Checkpoints)
+# =============================================================================
+# Per ChatGPT directive: Registration & App Creation cannot be API-verified.
+# These must be modeled as manual confirmation states with explicit user
+# acknowledgements and logged compliance checkpoints.
+#
+# Meta Docs Reference:
+# - https://developers.facebook.com/docs/development/register/
+# - https://developers.facebook.com/docs/development/create-an-app
+# - https://developers.facebook.com/docs/development/create-an-app/developer-settings
+
+
+class ManualVerificationStatus(Enum):
+    """Status for steps that require manual user verification.
+
+    These steps CANNOT be verified via API. They require explicit
+    user acknowledgement that they completed the step in Meta's dashboard.
+    """
+    NOT_STARTED = "not_started"       # User has not attempted this step
+    IN_PROGRESS = "in_progress"       # User is working on this step
+    VERIFIED_BY_HUMAN = "verified"    # User confirmed completion
+    SKIPPED = "skipped"               # User skipped (with warning)
+    FAILED = "failed"                 # User attempted but failed
+
+
+# Wizard steps with Meta-aligned requirements
+# CRITICAL: Use cases are IRREVERSIBLE once app is created
+SETUP_WIZARD_STEPS = [
+    {
+        "step": 1,
+        "id": "developer_registration",
+        "label": "Register as Meta Developer",
+        "verification_type": "manual",  # Cannot be API-verified
+        "required": True,
+        "blocking": True,
+        "description": "Register at developers.facebook.com to access App Dashboard.",
+        "what_meta_requires": "Facebook account + phone/email verification",
+        "why_it_matters": "Required to access any Meta developer tools or APIs.",
+        "user_action": "Go to developers.facebook.com, click 'Get Started', verify phone/email.",
+        "tool_can_verify": False,
+        "meta_url": "https://developers.facebook.com/async/registration",
+        "docs_url": "https://developers.facebook.com/docs/development/register/",
+        "confirmation_prompt": "I confirm I have registered as a Meta Developer.",
+    },
+    {
+        "step": 2,
+        "id": "app_creation",
+        "label": "Create Meta App",
+        "verification_type": "manual",  # App ID could be verified, but creation is manual
+        "required": True,
+        "blocking": True,
+        "description": "Create an app in Meta's App Dashboard.",
+        "what_meta_requires": "App name, contact email, use case selection",
+        "why_it_matters": "App ID and App Secret are required for all API authentication.",
+        "user_action": "developers.facebook.com/apps/create → Enter details → Select use case",
+        "tool_can_verify": False,  # We don't have app_id yet
+        "meta_url": "https://developers.facebook.com/apps/creation/",
+        "docs_url": "https://developers.facebook.com/docs/development/create-an-app",
+        "confirmation_prompt": "I confirm I have created a Meta App.",
+        "warning": "⚠️ Use cases are IRREVERSIBLE. Choose carefully.",
+    },
+    {
+        "step": 3,
+        "id": "use_case_selection",
+        "label": "Select 'Manage products with Catalog API' Use Case",
+        "verification_type": "manual",
+        "required": True,
+        "blocking": True,
+        "description": "Your app MUST include the Catalog API use case for Marketplace.",
+        "what_meta_requires": "Select 'Manage products with Catalog API' during app creation",
+        "why_it_matters": "Without this use case, catalog_management permission is IMPOSSIBLE. App cannot manage catalogs EVER.",
+        "user_action": "During app creation, select 'Manage products with Catalog API'.",
+        "tool_can_verify": False,  # We can check permissions later, not use case
+        "meta_url": "https://developers.facebook.com/apps/creation/",
+        "docs_url": "https://developers.facebook.com/docs/development/create-an-app",
+        "confirmation_prompt": "I confirm my app includes 'Manage products with Catalog API' use case.",
+        "warning": "⚠️ IRREVERSIBLE: If you created app without this use case, you must create a NEW app.",
+        "permanent_failure_message": "This app cannot ever manage catalogs. Create a new app with the correct use case.",
+    },
+    {
+        "step": 4,
+        "id": "business_portfolio",
+        "label": "Connect Business Portfolio",
+        "verification_type": "manual",
+        "required": False,  # Optional early, required for Commerce
+        "blocking": False,  # Soft-block early
+        "blocking_for": ["commerce_operations", "marketplace_write"],  # Hard-block for these
+        "description": "Connect app to a Business Portfolio (Business Manager).",
+        "what_meta_requires": "Business Portfolio for Commerce Account access",
+        "why_it_matters": "Commerce Account requires Business Portfolio. Marketplace listings require Commerce Account.",
+        "user_action": "Business Settings → Apps → Add → Connect your app",
+        "tool_can_verify": False,
+        "meta_url": "https://business.facebook.com/settings",
+        "docs_url": "https://developers.facebook.com/docs/development/create-an-app",
+        "confirmation_prompt": "I confirm my app is connected to a Business Portfolio.",
+        "deferred_warning": "⚠️ Marketplace operations will be blocked until this is complete.",
+    },
+    {
+        "step": 5,
+        "id": "system_user_creation",
+        "label": "Create System User",
+        "verification_type": "manual",
+        "required": True,
+        "blocking": True,
+        "description": "Create a System User in Business Manager for production operations.",
+        "what_meta_requires": "System User in Business Manager with asset access",
+        "why_it_matters": "Human tokens can be revoked. System User tokens are stable for production.",
+        "user_action": "Business Settings → System Users → Add → Assign assets",
+        "tool_can_verify": False,  # Token type is verifiable, not user creation
+        "meta_url": "https://business.facebook.com/settings/system-users",
+        "docs_url": "https://developers.facebook.com/docs/marketing-api/system-users",
+        "confirmation_prompt": "I confirm I have created a System User in Business Manager.",
+    },
+    {
+        "step": 6,
+        "id": "token_generation",
+        "label": "Generate System User Access Token",
+        "verification_type": "api",  # CAN be API-verified via /debug_token
+        "required": True,
+        "blocking": True,
+        "description": "Generate access token with required permissions.",
+        "what_meta_requires": "Token with catalog_management + business_management scopes",
+        "why_it_matters": "Token authenticates all API requests. Wrong scopes = silent failures.",
+        "user_action": "Business Settings → System Users → [User] → Generate Token → Select permissions",
+        "tool_can_verify": True,
+        "verify_endpoint": "/debug_token",
+        "meta_url": "https://business.facebook.com/settings/system-users",
+        "docs_url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens",
+        "required_permissions": ["catalog_management", "business_management"],
+    },
+    {
+        "step": 7,
+        "id": "catalog_creation",
+        "label": "Create or Select Product Catalog",
+        "verification_type": "api",  # CAN be API-verified via GET /{catalog_id}
+        "required": True,
+        "blocking": True,
+        "description": "Create or select an existing product catalog.",
+        "what_meta_requires": "Product catalog for Commerce API operations",
+        "why_it_matters": "Catalog is the container for all products. Required for Marketplace.",
+        "user_action": "Commerce Manager → Catalogs → Create Catalog (or use existing)",
+        "tool_can_verify": True,
+        "verify_endpoint": "/{catalog_id}",
+        "meta_url": "https://www.facebook.com/commerce_manager/catalogs/",
+        "docs_url": "https://developers.facebook.com/docs/commerce-platform/catalog",
+    },
+    {
+        "step": 8,
+        "id": "commerce_account_linkage",
+        "label": "Link Catalog to Commerce Account",
+        "verification_type": "api",  # CAN be API-verified
+        "required": True,
+        "blocking": True,
+        "description": "Link your catalog to a Commerce Account for Marketplace visibility.",
+        "what_meta_requires": "Catalog linked to Commerce Account",
+        "why_it_matters": "Valid catalog ≠ Marketplace visibility. This is the #1 failure point.",
+        "user_action": "Commerce Manager → Settings → Business Assets → Link Product Catalog",
+        "tool_can_verify": True,
+        "verify_endpoint": "/{catalog_id}?fields=commerce_merchant_settings",
+        "meta_url": "https://business.facebook.com/commerce",
+        "docs_url": "https://developers.facebook.com/docs/commerce-platform/setup",
+        "failure_explanation": "Products will NOT appear on Marketplace without this linkage.",
+    },
+]
+
+
+class ZeroCredentialDiagnostics:
+    """
+    Diagnostics that work without real credentials.
+
+    Per ChatGPT directive:
+    - Returns explicit 'UNKNOWN' states, never fabricates success
+    - Supports offline mode for UX development and CI
+    - Schema validation without API calls
+    - Manual verification checkpoints
+    """
+
+    def __init__(self, config_path: str = None):
+        """
+        Initialize diagnostics.
+
+        Args:
+            config_path: Path to config file (for loading manual verifications)
+        """
+        self.config_path = config_path or os.path.join(
+            os.path.dirname(__file__), ".fb_api_config.json"
+        )
+        self._manual_verifications: Dict[str, ManualVerificationStatus] = {}
+        self._load_config()
+
+    def _load_config(self):
+        """Load saved manual verifications from config file."""
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    data = json.load(f)
+                    for step_id, status in data.get("manual_verifications", {}).items():
+                        try:
+                            self._manual_verifications[step_id] = ManualVerificationStatus(status)
+                        except ValueError:
+                            self._manual_verifications[step_id] = ManualVerificationStatus.NOT_STARTED
+        except Exception as e:
+            logger.warning(f"Could not load config: {e}")
+
+    def _save_config(self):
+        """Save manual verifications to config file."""
+        try:
+            data = {
+                "manual_verifications": {
+                    step_id: status.value
+                    for step_id, status in self._manual_verifications.items()
+                },
+                "last_updated": datetime.utcnow().isoformat() + "Z",
+            }
+            with open(self.config_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Config saved to {self.config_path}")
+        except Exception as e:
+            logger.error(f"Could not save config: {e}")
+
+    def set_manual_verification(self, step_id: str, status: ManualVerificationStatus) -> bool:
+        """
+        Set manual verification status for a step.
+
+        This is a logged compliance checkpoint per mandatory-rules-v6.0.md.
+        """
+        step = next((s for s in SETUP_WIZARD_STEPS if s["id"] == step_id), None)
+        if not step:
+            logger.error(f"Unknown step_id: {step_id}")
+            return False
+
+        old_status = self._manual_verifications.get(step_id, ManualVerificationStatus.NOT_STARTED)
+        self._manual_verifications[step_id] = status
+
+        logger.info(
+            f"MANUAL_VERIFICATION | step={step_id} | "
+            f"old_status={old_status.value} | new_status={status.value} | "
+            f"label={step['label']}"
+        )
+
+        self._save_config()
+        return True
+
+    def get_manual_verification(self, step_id: str) -> ManualVerificationStatus:
+        """Get manual verification status for a step."""
+        return self._manual_verifications.get(step_id, ManualVerificationStatus.NOT_STARTED)
+
+    def get_wizard_status(self) -> dict:
+        """
+        Get full wizard status for UI display.
+
+        Returns dict with:
+        - steps: List of step dicts with current status
+        - current_step: First incomplete step number
+        - completed_count: Number of verified steps
+        - blocking_issues: List of blocking steps that need attention
+        - can_proceed_to_api: Whether API-verified steps can begin
+        """
+        steps = []
+        current_step = 1
+        completed_count = 0
+        blocking_issues = []
+        found_incomplete = False
+
+        for step_def in SETUP_WIZARD_STEPS:
+            step_id = step_def["id"]
+            verification_type = step_def["verification_type"]
+
+            if verification_type == "manual":
+                status = self.get_manual_verification(step_id)
+                is_complete = status == ManualVerificationStatus.VERIFIED_BY_HUMAN
+            else:
+                # API-verified steps - check current API state
+                is_complete = False  # Will be determined by get_current_api_state()
+                status = ManualVerificationStatus.NOT_STARTED
+
+            if is_complete:
+                completed_count += 1
+            elif not found_incomplete:
+                current_step = step_def["step"]
+                found_incomplete = True
+
+            if not is_complete and step_def.get("blocking", False):
+                blocking_issues.append({
+                    "step": step_def["step"],
+                    "id": step_id,
+                    "label": step_def["label"],
+                    "fix_url": step_def.get("meta_url"),
+                    "warning": step_def.get("warning"),
+                })
+
+            steps.append({
+                **step_def,
+                "status": status.value if isinstance(status, ManualVerificationStatus) else status,
+                "is_complete": is_complete,
+            })
+
+        # Can proceed to API steps only if all manual steps are verified
+        manual_steps_complete = all(
+            self.get_manual_verification(s["id"]) == ManualVerificationStatus.VERIFIED_BY_HUMAN
+            for s in SETUP_WIZARD_STEPS
+            if s["verification_type"] == "manual" and s.get("blocking", False)
+        )
+
+        return {
+            "steps": steps,
+            "current_step": current_step,
+            "total_steps": len(SETUP_WIZARD_STEPS),
+            "completed_count": completed_count,
+            "blocking_issues": blocking_issues,
+            "can_proceed_to_api": manual_steps_complete,
+            "all_complete": completed_count == len(SETUP_WIZARD_STEPS),
+        }
+
+    def validate_config_schema(self, config: dict) -> List[dict]:
+        """
+        Validate configuration schema without making API calls.
+
+        Returns list of validation errors.
+        """
+        errors = []
+
+        # Token validation
+        token = config.get("FB_ACCESS_TOKEN", "").strip()
+        if not token:
+            errors.append({
+                "field": "FB_ACCESS_TOKEN",
+                "error": "Required but missing",
+                "severity": "blocking",
+                "fix_step": 6,
+            })
+        elif len(token) < 50:
+            errors.append({
+                "field": "FB_ACCESS_TOKEN",
+                "error": "Token appears too short (expected 100+ characters)",
+                "severity": "warning",
+                "fix_step": 6,
+            })
+
+        # Catalog ID validation
+        catalog_id = config.get("FB_CATALOG_ID", "").strip()
+        if not catalog_id:
+            errors.append({
+                "field": "FB_CATALOG_ID",
+                "error": "Required but missing",
+                "severity": "blocking",
+                "fix_step": 7,
+            })
+        elif not catalog_id.isdigit():
+            errors.append({
+                "field": "FB_CATALOG_ID",
+                "error": "Catalog ID must be numeric",
+                "severity": "blocking",
+                "fix_step": 7,
+            })
+
+        return errors
+
+    def get_expectations(self) -> dict:
+        """
+        Get what permissions/capabilities WOULD be needed.
+
+        This allows UI development and education without real credentials.
+        """
+        return {
+            "required_permissions": ["catalog_management", "business_management"],
+            "optional_permissions": ["pages_read_engagement", "pages_show_list"],
+            "api_version": GRAPH_API_VERSION,
+            "token_type": "System User (recommended)",
+            "catalog_vertical": "commerce",
+            "meta_products": ["Commerce Manager", "Catalog API", "Marketplace"],
+            "setup_steps": len(SETUP_WIZARD_STEPS),
+            "manual_steps": sum(1 for s in SETUP_WIZARD_STEPS if s["verification_type"] == "manual"),
+            "api_steps": sum(1 for s in SETUP_WIZARD_STEPS if s["verification_type"] == "api"),
+        }
+
+    def get_diagnostic_report(self, include_api_check: bool = False) -> dict:
+        """
+        Generate comprehensive diagnostic report.
+
+        Args:
+            include_api_check: If True and credentials exist, include API validation
+
+        Returns complete diagnostic dict.
+        """
+        # Schema validation (no API calls)
+        config = {
+            "FB_ACCESS_TOKEN": os.environ.get("FB_ACCESS_TOKEN", ""),
+            "FB_CATALOG_ID": os.environ.get("FB_CATALOG_ID", ""),
+        }
+        schema_errors = self.validate_config_schema(config)
+
+        # Wizard status
+        wizard_status = self.get_wizard_status()
+
+        # API state (if requested and possible)
+        api_state = None
+        api_details = None
+        if include_api_check and config["FB_ACCESS_TOKEN"]:
+            api_state, api_details = get_current_api_state()
+        else:
+            api_state = FacebookAPIState.OFFLINE
+            api_details = {"reason": "No credentials or API check skipped"}
+
+        return {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "mode": "offline" if not include_api_check else "live",
+            "schema_validation": {
+                "errors": schema_errors,
+                "is_valid": len([e for e in schema_errors if e["severity"] == "blocking"]) == 0,
+            },
+            "wizard_status": wizard_status,
+            "api_state": api_state.name if api_state else "UNKNOWN",
+            "api_details": api_details,
+            "expectations": self.get_expectations(),
+            "config_path": self.config_path,
+        }
+
+
+def get_blocking_reason(feature: str, api_state: FacebookAPIState, wizard_status: dict) -> Optional[dict]:
+    """
+    Get detailed blocking reason for a feature.
+
+    Returns None if feature is allowed, otherwise returns blocking details.
+    """
+    # Check wizard-level blocks first
+    if not wizard_status.get("can_proceed_to_api", False):
+        blocking_step = next(
+            (issue for issue in wizard_status.get("blocking_issues", [])),
+            None
+        )
+        if blocking_step:
+            return {
+                "blocked": True,
+                "reason": f"Manual setup incomplete: {blocking_step['label']}",
+                "fix_url": blocking_step.get("fix_url"),
+                "current_step": wizard_status.get("current_step"),
+                "rules_enforced": ["Rule 0 (workflow)", "Rule 6 (scope containment)"],
+            }
+
+    # Check API state blocks
+    allowed, reason = is_feature_allowed(api_state, feature)
+    if not allowed:
+        return {
+            "blocked": True,
+            "reason": reason,
+            "current_state": api_state.name,
+            "rules_enforced": ["Rule 0 (workflow)", "Rule 6 (scope containment)"],
+        }
+
+    return None
+
+
+# =============================================================================
 # COMPLIANCE ENFORCEMENT (Meta-Aligned UX)
 # =============================================================================
 
