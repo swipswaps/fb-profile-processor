@@ -69,15 +69,24 @@ try:
         get_commerce_api, FacebookCommerceAPI, run_preflight_compliance_check,
         ComplianceGate, get_api_version_status,
         COMPLIANCE_REQUIREMENTS, get_compliance_status, is_globally_compliant,
-        run_live_diagnostics
+        run_live_diagnostics,
+        # Phase 1: Canonical API State Machine
+        FacebookAPIState, get_current_api_state, is_feature_allowed, get_state_progress,
+        API_STATE_METADATA,
+        # Phase 2: Zero-Credential Diagnostics
+        ManualVerificationStatus, SETUP_WIZARD_STEPS, ZeroCredentialDiagnostics,
+        get_blocking_reason,
     )
     COMMERCE_API_AVAILABLE = True
-except ImportError:
+    WIZARD_AVAILABLE = True
+except ImportError as e:
     COMMERCE_API_AVAILABLE = False
+    WIZARD_AVAILABLE = False
     COMPLIANCE_REQUIREMENTS = []
     def get_compliance_status(): return {"requirements": [], "total": 0, "complete": 0, "can_proceed": False}
     def is_globally_compliant(): return False, "Commerce API not available", []
     def run_live_diagnostics(api=None): return {"checks": [], "can_proceed": False, "live_checked": False}
+    logger.warning(f"Could not import commerce API components: {e}")
 
 # Future-proofing: Provider pattern for API support
 try:
@@ -742,6 +751,239 @@ def render_listing_card(row: pd.Series):
         # Link to Facebook
         st.markdown(f"[View on Facebook](https://facebook.com/marketplace/item/{item_id})")
         st.markdown("---")
+
+
+# =============================================================================
+# SETUP WIZARD UI (Phase 3: Unified API Config with Wizard)
+# =============================================================================
+# Per ChatGPT directive:
+# - Wizard is a STATE RENDERER, not a decision maker
+# - Progression is RULE-BLOCKED, not button-disabled
+# - Irreversible steps require EXPLICIT ACKNOWLEDGEMENT
+# - No silent transitions
+
+
+def render_setup_wizard():
+    """
+    Render the Facebook API Setup Wizard.
+
+    This wizard guides users through the Meta configuration process
+    with explicit acknowledgements for manual steps and rule-based blocking.
+
+    Per ChatGPT directives (mandatory per Rule 10):
+    - Renders state from ZeroCredentialDiagnostics
+    - Never infers readiness
+    - Never bypasses get_blocking_reason()
+    - Every blocked action surfaces: current state, required state, fix path
+    """
+    if not WIZARD_AVAILABLE:
+        st.error("Setup Wizard not available - missing required components")
+        return
+
+    # Initialize diagnostics (singleton pattern for session)
+    if 'wizard_diagnostics' not in st.session_state:
+        st.session_state.wizard_diagnostics = ZeroCredentialDiagnostics()
+
+    diag = st.session_state.wizard_diagnostics
+
+    # Get current state from authoritative sources
+    wizard_status = diag.get_wizard_status()
+    api_state, api_details = get_current_api_state(offline_mode=True, skip_api_calls=True)
+    progress = get_state_progress(api_state)
+
+    # =================================================================
+    # MODE INDICATOR (per ChatGPT: Zero-Credential Mode Must Be Visually Obvious)
+    # =================================================================
+    if api_state == FacebookAPIState.OFFLINE:
+        st.info("🔌 **OFFLINE MODE** — No API credentials configured. "
+                "Complete the wizard steps below to enable API access.")
+    elif api_state.value < 0:
+        st.warning(f"⚠️ **{api_state.name} MODE** — {api_details.get('reason', 'Check configuration')}")
+    else:
+        state_meta = API_STATE_METADATA.get(api_state, {})
+        st.success(f"{state_meta.get('icon', '✅')} **{state_meta.get('label', api_state.name)}** — "
+                   f"Progress: {progress['percent']}%")
+
+    st.markdown("---")
+
+    # =================================================================
+    # PROGRESS BAR
+    # =================================================================
+    col_progress, col_status = st.columns([3, 1])
+    with col_progress:
+        st.progress(wizard_status['completed_count'] / wizard_status['total_steps'])
+    with col_status:
+        st.caption(f"Step {wizard_status['current_step']} of {wizard_status['total_steps']}")
+
+    # =================================================================
+    # WIZARD STEPS (Collapsible, State-Driven)
+    # =================================================================
+    st.subheader("📋 Configuration Steps")
+
+    for step_info in wizard_status['steps']:
+        step_num = step_info['step']
+        step_id = step_info['id']
+        is_complete = step_info['is_complete']
+        is_manual = step_info['verification_type'] == 'manual'
+        is_blocking = step_info.get('blocking', False)
+        current_status = step_info.get('status', 'not_started')
+
+        # Status icon
+        if is_complete:
+            status_icon = "✅"
+        elif current_status == 'in_progress':
+            status_icon = "🔄"
+        elif current_status == 'skipped':
+            status_icon = "⏭️"
+        elif current_status == 'failed':
+            status_icon = "❌"
+        else:
+            status_icon = "⚪"
+
+        # Determine if this step is the current active step
+        is_active = (step_num == wizard_status['current_step'])
+
+        # Render step as expander
+        with st.expander(
+            f"{status_icon} Step {step_num}: {step_info['label']}",
+            expanded=is_active and not is_complete
+        ):
+            # Description
+            st.markdown(f"**{step_info['description']}**")
+
+            # Why it matters (evidence framing per ChatGPT)
+            if step_info.get('why_it_matters'):
+                st.caption(f"📌 **Why this matters:** {step_info['why_it_matters']}")
+
+            # What Meta requires
+            if step_info.get('what_meta_requires'):
+                st.markdown(f"**Meta requires:** {step_info['what_meta_requires']}")
+
+            # Warning (for irreversible steps)
+            if step_info.get('warning'):
+                st.warning(step_info['warning'])
+
+            # User action
+            if step_info.get('user_action'):
+                st.markdown(f"**Action:** {step_info['user_action']}")
+
+            # Meta docs link (labeled as evidence source, not help)
+            col_docs, col_meta = st.columns(2)
+            if step_info.get('docs_url'):
+                with col_docs:
+                    st.markdown(f"📚 [Meta Documentation (Evidence Source)]({step_info['docs_url']})")
+            if step_info.get('meta_url'):
+                with col_meta:
+                    st.markdown(f"🔗 [Meta Dashboard]({step_info['meta_url']})")
+
+            st.markdown("---")
+
+            # =================================================================
+            # MANUAL VERIFICATION SECTION (for manual steps only)
+            # =================================================================
+            if is_manual:
+                if is_complete:
+                    st.success("✅ **Verified by you** — This step has been confirmed.")
+                    # Show when it was verified
+                    if st.button(f"🔄 Re-verify Step {step_num}", key=f"reverify_{step_id}"):
+                        diag.set_manual_verification(step_id, ManualVerificationStatus.NOT_STARTED)
+                        st.rerun()
+                else:
+                    # Confirmation prompt (per ChatGPT: explicit acknowledgement required)
+                    confirmation_text = step_info.get('confirmation_prompt',
+                                                      f"I confirm I have completed step {step_num}.")
+
+                    # Use checkbox for explicit acknowledgement
+                    confirm_key = f"confirm_{step_id}"
+                    if confirm_key not in st.session_state:
+                        st.session_state[confirm_key] = False
+
+                    confirmed = st.checkbox(
+                        confirmation_text,
+                        key=confirm_key,
+                        help="Check this box to confirm you have completed this step in Meta's dashboard."
+                    )
+
+                    col_verify, col_skip = st.columns(2)
+
+                    with col_verify:
+                        if st.button(
+                            f"✅ Mark as Verified",
+                            disabled=not confirmed,
+                            type="primary" if confirmed else "secondary",
+                            key=f"verify_{step_id}",
+                            help="Requires confirmation checkbox above"
+                        ):
+                            diag.set_manual_verification(step_id, ManualVerificationStatus.VERIFIED_BY_HUMAN)
+                            logger.info(f"WIZARD: Step {step_id} marked as VERIFIED_BY_HUMAN")
+                            st.session_state[confirm_key] = False
+                            st.rerun()
+
+                    with col_skip:
+                        if not is_blocking:
+                            if st.button(f"⏭️ Skip (with warning)", key=f"skip_{step_id}"):
+                                diag.set_manual_verification(step_id, ManualVerificationStatus.SKIPPED)
+                                logger.warning(f"WIZARD: Step {step_id} SKIPPED by user")
+                                st.rerun()
+                        else:
+                            st.caption("❌ This step cannot be skipped")
+
+            # =================================================================
+            # API-VERIFIED SECTION (for API steps only)
+            # =================================================================
+            else:
+                if is_complete:
+                    st.success("✅ **API Verified** — This step passed validation.")
+                else:
+                    # Check if prerequisites are met
+                    if not wizard_status.get('can_proceed_to_api', False):
+                        st.warning("⏳ **Waiting for manual steps** — Complete all manual verification steps first.")
+                    else:
+                        st.info("🔍 This step will be verified via API when credentials are configured.")
+
+                        # Show required permissions if applicable
+                        if step_info.get('required_permissions'):
+                            st.caption(f"Required permissions: {', '.join(step_info['required_permissions'])}")
+
+    # =================================================================
+    # BLOCKING REASONS PANEL (per ChatGPT: surfaces what Meta hides)
+    # =================================================================
+    if wizard_status['blocking_issues']:
+        st.markdown("---")
+        st.subheader("🚫 Blocking Issues")
+
+        for issue in wizard_status['blocking_issues']:
+            with st.container():
+                st.error(f"**Step {issue['step']}:** {issue['label']}")
+                if issue.get('warning'):
+                    st.caption(issue['warning'])
+                if issue.get('fix_url'):
+                    st.markdown(f"🔗 [Fix in Meta Dashboard]({issue['fix_url']})")
+
+    # =================================================================
+    # DIAGNOSTIC REPORT (Zero-Credential Mode)
+    # =================================================================
+    st.markdown("---")
+    with st.expander("🔧 Diagnostic Report", expanded=False):
+        report = diag.get_diagnostic_report(include_api_check=False)
+
+        st.json({
+            "mode": report['mode'],
+            "api_state": report['api_state'],
+            "wizard_progress": f"{wizard_status['completed_count']}/{wizard_status['total_steps']}",
+            "can_proceed_to_api": wizard_status['can_proceed_to_api'],
+            "blocking_issues_count": len(wizard_status['blocking_issues']),
+            "schema_valid": report['schema_validation']['is_valid'],
+        })
+
+        # Show expectations (what would be needed)
+        st.markdown("**Expected Configuration:**")
+        expectations = report['expectations']
+        st.markdown(f"- Required permissions: `{expectations['required_permissions']}`")
+        st.markdown(f"- API version: `{expectations['api_version']}`")
+        st.markdown(f"- Token type: `{expectations['token_type']}`")
+
+    return wizard_status
 
 
 def main():
@@ -1801,42 +2043,82 @@ Image Sources:
         st.header("⚙️ Settings & API Configuration")
 
         # =================================================================
+        # SETUP WIZARD SECTION (Phase 3: Unified API Config UI)
+        # Per ChatGPT directive: Wizard is a STATE RENDERER, not decision maker
+        # =================================================================
+        if WIZARD_AVAILABLE:
+            # Show wizard in collapsible section
+            with st.expander("📋 **Meta API Setup Wizard** (Guided Configuration)", expanded=True):
+                wizard_status = render_setup_wizard()
+
+                # Log wizard state for compliance audit
+                logger.info(f"WIZARD_STATE: completed={wizard_status['completed_count']}/{wizard_status['total_steps']} "
+                           f"can_proceed_to_api={wizard_status['can_proceed_to_api']} "
+                           f"blocking_issues={len(wizard_status['blocking_issues'])}")
+        else:
+            st.warning("⚠️ Setup Wizard not available — using legacy configuration")
+
+        st.markdown("---")
+
+        # =================================================================
         # UNIFIED BLOCKING BANNER (per ChatGPT UX directive)
         # Single, deduplicated status message at top
+        # Now derived from wizard state when available
         # =================================================================
         current_token = marketplace_scraper.get_access_token()
         current_catalog = marketplace_scraper.get_catalog_id()
         api = marketplace_scraper.get_facebook_api()
         api_status = api.get_api_status()
 
-        blocking_issues = []
-        if not current_token:
-            blocking_issues.append(("TOKEN_MISSING", "Access token not configured"))
-        elif not api_status.get('api_available', False):
-            blocking_issues.append(("TOKEN_INVALID", "Token validation failed"))
+        # Use wizard-derived blocking or fall back to legacy
+        if WIZARD_AVAILABLE and 'wizard_diagnostics' in st.session_state:
+            diag = st.session_state.wizard_diagnostics
+            wizard_status = diag.get_wizard_status()
 
-        if current_token and api_status.get('api_available') and not current_catalog:
-            blocking_issues.append(("CATALOG_MISSING", "Catalog ID not configured"))
-        elif current_token and api_status.get('api_available') and current_catalog and not api_status.get('catalog_available'):
-            blocking_issues.append(("CATALOG_INVALID", "Catalog access failed"))
-
-        # Display single blocking banner
-        if blocking_issues:
-            primary_issue = blocking_issues[0]
-            remaining = len(blocking_issues) - 1
-
-            if primary_issue[0] in ("TOKEN_MISSING", "TOKEN_INVALID"):
-                st.error(f"🚫 **Operations Blocked:** {primary_issue[1]}" +
-                        (f" (+{remaining} more)" if remaining > 0 else "") +
-                        " — Configure below to enable API access")
+            if not wizard_status.get('can_proceed_to_api', False):
+                # Manual steps incomplete
+                st.error("🚫 **Operations Blocked:** Complete manual verification steps in wizard above")
+                logger.info("API Config blocked: Manual wizard steps incomplete")
+            elif not current_token:
+                st.warning("⚠️ **Token Required:** Add access token below to enable API access")
+            elif not api_status.get('api_available', False):
+                st.error("🚫 **Token Invalid:** Token validation failed")
+            elif not current_catalog:
+                st.warning("⚠️ **Catalog Required:** Configure catalog ID below")
+            elif not api_status.get('catalog_available'):
+                st.error("🚫 **Catalog Invalid:** Catalog access failed")
             else:
-                st.warning(f"⚠️ **Limited Mode:** {primary_issue[1]}" +
-                          (f" (+{remaining} more)" if remaining > 0 else ""))
-
-            logger.info(f"API Config blocking issues: {[b[0] for b in blocking_issues]}")
+                st.success("✅ **API Ready** — All systems operational")
+                logger.info("API Config: All checks passed")
         else:
-            st.success("✅ **API Ready** — All systems operational")
-            logger.info("API Config: All checks passed")
+            # Legacy blocking logic
+            blocking_issues = []
+            if not current_token:
+                blocking_issues.append(("TOKEN_MISSING", "Access token not configured"))
+            elif not api_status.get('api_available', False):
+                blocking_issues.append(("TOKEN_INVALID", "Token validation failed"))
+
+            if current_token and api_status.get('api_available') and not current_catalog:
+                blocking_issues.append(("CATALOG_MISSING", "Catalog ID not configured"))
+            elif current_token and api_status.get('api_available') and current_catalog and not api_status.get('catalog_available'):
+                blocking_issues.append(("CATALOG_INVALID", "Catalog access failed"))
+
+            if blocking_issues:
+                primary_issue = blocking_issues[0]
+                remaining = len(blocking_issues) - 1
+
+                if primary_issue[0] in ("TOKEN_MISSING", "TOKEN_INVALID"):
+                    st.error(f"🚫 **Operations Blocked:** {primary_issue[1]}" +
+                            (f" (+{remaining} more)" if remaining > 0 else "") +
+                            " — Configure below to enable API access")
+                else:
+                    st.warning(f"⚠️ **Limited Mode:** {primary_issue[1]}" +
+                              (f" (+{remaining} more)" if remaining > 0 else ""))
+
+                logger.info(f"API Config blocking issues: {[b[0] for b in blocking_issues]}")
+            else:
+                st.success("✅ **API Ready** — All systems operational")
+                logger.info("API Config: All checks passed")
 
         st.markdown("---")
 
