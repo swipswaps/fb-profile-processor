@@ -16,6 +16,7 @@ import re
 import json
 import logging
 import requests
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from datetime import datetime
@@ -1090,6 +1091,458 @@ def get_blocking_reason(feature: str, api_state: FacebookAPIState, wizard_status
         }
 
     return None
+
+
+# =============================================================================
+# PHASE 4: TOKEN LIFECYCLE & ASSET PROVENANCE ENFORCEMENT
+# =============================================================================
+# Per ChatGPT directive (mandatory per Rule 10):
+# - This is a state-level enforcement layer, not a UI feature
+# - No new buttons, no new inputs - only new reasons things are blocked
+# - If any answer is "uncertain", state must be DEGRADED or BLOCKED
+# =============================================================================
+
+
+class TokenType(Enum):
+    """
+    Token types for Meta Graph API.
+
+    Meta documentation distinguishes these with different capabilities:
+    - SYSTEM_USER: Long-lived, no user revocation risk, recommended for production
+    - HUMAN_USER: Can be revoked without notice, expires, not for background jobs
+    - PAGE_TOKEN: Scoped to page, limited utility for catalog operations
+    - APP_TOKEN: Cannot access user resources, INVALID for Marketplace
+    - UNKNOWN: Cannot determine token type (treated as BLOCKED)
+    """
+    SYSTEM_USER = "system_user"
+    HUMAN_USER = "human_user"
+    PAGE_TOKEN = "page_token"
+    APP_TOKEN = "app_token"
+    UNKNOWN = "unknown"
+
+
+class TokenFitnessLevel(Enum):
+    """
+    Token fitness for background operations.
+
+    Determines if token is suitable for:
+    - Scheduled sync
+    - Background jobs
+    - Non-interactive usage
+    """
+    FIT = "fit"                     # System User, long expiry, all permissions
+    DEGRADED = "degraded"           # Human token or expiring soon
+    UNFIT = "unfit"                 # App token or missing critical permissions
+    UNKNOWN = "unknown"             # Cannot assess (treat as BLOCKED)
+
+
+@dataclass
+class TokenLifecycleAssessment:
+    """
+    Comprehensive token lifecycle assessment for Phase 4 enforcement.
+
+    Deterministically answers:
+    1. What kind of token is this?
+    2. Is this token fit for background operations?
+    3. What are the blocking reasons if any?
+    """
+    token_type: TokenType
+    fitness_level: TokenFitnessLevel
+    is_background_suitable: bool
+    expires_at: Optional[int]
+    days_until_expiry: Optional[float]
+    rotation_risk: str  # "low", "medium", "high", "critical"
+    revocation_surface: str  # Description of revocation risks
+    blocking_reasons: List[str]
+    warnings: List[str]
+    assessed_at: str  # ISO timestamp
+
+    def to_dict(self) -> dict:
+        return {
+            "token_type": self.token_type.value,
+            "fitness_level": self.fitness_level.value,
+            "is_background_suitable": self.is_background_suitable,
+            "expires_at": self.expires_at,
+            "days_until_expiry": self.days_until_expiry,
+            "rotation_risk": self.rotation_risk,
+            "revocation_surface": self.revocation_surface,
+            "blocking_reasons": self.blocking_reasons,
+            "warnings": self.warnings,
+            "assessed_at": self.assessed_at,
+        }
+
+
+def assess_token_lifecycle(token_meta: dict) -> TokenLifecycleAssessment:
+    """
+    Assess token lifecycle characteristics for Phase 4 enforcement.
+
+    Per ChatGPT directive:
+    - Deterministic answers only
+    - Uncertain = DEGRADED or BLOCKED, never "mostly ready"
+    - Logic first, no UI
+
+    Args:
+        token_meta: Output from debug_token() or _validate_token_with_api()
+
+    Returns:
+        TokenLifecycleAssessment with all lifecycle properties
+    """
+    import time
+    from datetime import datetime
+
+    blocking_reasons = []
+    warnings = []
+    assessed_at = datetime.utcnow().isoformat() + "Z"
+
+    # === STEP 1: Determine token type ===
+    # Meta's debug_token returns 'type' field
+    raw_type = str(token_meta.get("type", "")).lower()
+    user_id = token_meta.get("user_id")
+    app_id = token_meta.get("app_id")
+    granular_scopes = token_meta.get("granular_scopes")
+
+    # System User detection:
+    # - Has granular_scopes (business-scoped permissions)
+    # - Type contains "system" or user_id indicates system user
+    if raw_type in ("system_user", "system user", "system"):
+        token_type = TokenType.SYSTEM_USER
+    elif granular_scopes is not None:
+        # Business-scoped token (likely System User)
+        token_type = TokenType.SYSTEM_USER
+    elif raw_type in ("user", "user_token"):
+        token_type = TokenType.HUMAN_USER
+    elif raw_type in ("page", "page_token"):
+        token_type = TokenType.PAGE_TOKEN
+    elif raw_type in ("app", "app_token"):
+        token_type = TokenType.APP_TOKEN
+        blocking_reasons.append("App tokens cannot access user resources - INVALID for Marketplace")
+    elif user_id and not granular_scopes:
+        # Has user_id but no granular scopes = human user
+        token_type = TokenType.HUMAN_USER
+    else:
+        token_type = TokenType.UNKNOWN
+        blocking_reasons.append("Cannot determine token type - treating as BLOCKED")
+
+    # === STEP 2: Assess expiry and rotation risk ===
+    expires_at = token_meta.get("expires_at")
+    days_until_expiry = None
+    rotation_risk = "unknown"
+
+    if expires_at == 0:
+        # Never expires (some System User tokens)
+        days_until_expiry = None
+        rotation_risk = "low"
+    elif expires_at:
+        now = int(time.time())
+        remaining_seconds = expires_at - now
+        days_until_expiry = remaining_seconds / 86400
+
+        if remaining_seconds <= 0:
+            blocking_reasons.append(f"Token EXPIRED at {datetime.fromtimestamp(expires_at).isoformat()}")
+            rotation_risk = "critical"
+        elif days_until_expiry < 1:
+            blocking_reasons.append(f"Token expires in {remaining_seconds / 3600:.1f} hours - IMMINENT EXPIRY")
+            rotation_risk = "critical"
+        elif days_until_expiry < 7:
+            warnings.append(f"Token expires in {days_until_expiry:.1f} days - rotation required soon")
+            rotation_risk = "high"
+        elif days_until_expiry < 30:
+            warnings.append(f"Token expires in {days_until_expiry:.0f} days - plan rotation")
+            rotation_risk = "medium"
+        else:
+            rotation_risk = "low"
+    else:
+        rotation_risk = "unknown"
+        warnings.append("Cannot determine token expiry - monitor closely")
+
+    # === STEP 3: Determine revocation surface ===
+    if token_type == TokenType.SYSTEM_USER:
+        revocation_surface = "Low: System User tokens survive user account changes"
+    elif token_type == TokenType.HUMAN_USER:
+        revocation_surface = "HIGH: Human tokens can be revoked by user password changes, de-auth, or Meta account actions"
+        warnings.append("Human user tokens have high revocation risk - not recommended for production")
+    elif token_type == TokenType.PAGE_TOKEN:
+        revocation_surface = "Medium: Page tokens tied to page admin status"
+    elif token_type == TokenType.APP_TOKEN:
+        revocation_surface = "Low: App tokens only invalidated by app secret rotation"
+    else:
+        revocation_surface = "UNKNOWN: Cannot assess revocation surface"
+
+    # === STEP 4: Determine background suitability ===
+    is_background_suitable = (
+        token_type == TokenType.SYSTEM_USER
+        and len(blocking_reasons) == 0
+        and rotation_risk not in ("critical", "high")
+    )
+
+    # === STEP 5: Calculate fitness level ===
+    if len(blocking_reasons) > 0:
+        fitness_level = TokenFitnessLevel.UNFIT
+    elif token_type == TokenType.SYSTEM_USER and rotation_risk in ("low", "medium"):
+        fitness_level = TokenFitnessLevel.FIT
+    elif token_type == TokenType.HUMAN_USER:
+        fitness_level = TokenFitnessLevel.DEGRADED
+        if not any("Human user" in w for w in warnings):
+            warnings.append("Human user token - use System User for production reliability")
+    elif rotation_risk in ("critical", "high"):
+        fitness_level = TokenFitnessLevel.DEGRADED
+    elif token_type == TokenType.UNKNOWN:
+        fitness_level = TokenFitnessLevel.UNKNOWN
+    else:
+        fitness_level = TokenFitnessLevel.DEGRADED
+
+    logger.info(f"TOKEN_LIFECYCLE_ASSESSMENT | type={token_type.value} | "
+                f"fitness={fitness_level.value} | rotation_risk={rotation_risk} | "
+                f"background_suitable={is_background_suitable} | "
+                f"blocking_reasons={len(blocking_reasons)} | warnings={len(warnings)}")
+
+    return TokenLifecycleAssessment(
+        token_type=token_type,
+        fitness_level=fitness_level,
+        is_background_suitable=is_background_suitable,
+        expires_at=expires_at,
+        days_until_expiry=days_until_expiry,
+        rotation_risk=rotation_risk,
+        revocation_surface=revocation_surface,
+        blocking_reasons=blocking_reasons,
+        warnings=warnings,
+        assessed_at=assessed_at,
+    )
+
+
+@dataclass
+class AssetOwnershipChain:
+    """
+    Asset provenance verification for Phase 4 enforcement.
+
+    Verifies the ownership chain:
+    Token → App → Business → Catalog → Commerce Account
+
+    All must be coherent for Marketplace operations.
+    """
+    token_user_id: Optional[str]
+    token_app_id: Optional[str]
+    business_ids: List[str]
+    catalog_business_id: Optional[str]
+    catalog_id: Optional[str]
+    commerce_account_ids: List[str]
+    chain_coherent: bool
+    mismatches: List[str]
+    verified_at: str
+
+    def to_dict(self) -> dict:
+        return {
+            "token_user_id": self.token_user_id,
+            "token_app_id": self.token_app_id,
+            "business_ids": self.business_ids,
+            "catalog_business_id": self.catalog_business_id,
+            "catalog_id": self.catalog_id,
+            "commerce_account_ids": self.commerce_account_ids,
+            "chain_coherent": self.chain_coherent,
+            "mismatches": self.mismatches,
+            "verified_at": self.verified_at,
+        }
+
+
+def verify_asset_ownership_chain(
+    token_meta: dict,
+    catalog_id: str = None,
+    api_instance=None
+) -> AssetOwnershipChain:
+    """
+    Verify asset ownership chain for Phase 4 enforcement.
+
+    Per ChatGPT directive:
+    - Does this token actually belong to the assets being used?
+    - App ↔ Business, Business ↔ Catalog, Catalog ↔ Commerce Account
+    - If uncertain, state = DEGRADED or BLOCKED
+
+    Args:
+        token_meta: Token metadata from debug_token
+        catalog_id: Catalog ID to verify ownership
+        api_instance: Optional FacebookCommerceAPI for additional checks
+
+    Returns:
+        AssetOwnershipChain with coherence status
+    """
+    from datetime import datetime
+
+    token_user_id = token_meta.get("user_id")
+    token_app_id = token_meta.get("app_id")
+    business_ids = []
+    catalog_business_id = None
+    commerce_account_ids = []
+    mismatches = []
+
+    verified_at = datetime.utcnow().isoformat() + "Z"
+
+    # Get businesses accessible to this token
+    if api_instance and api_instance.is_valid:
+        try:
+            businesses = api_instance.get_businesses()
+            business_ids = [b.get("id") for b in businesses if b.get("id")]
+        except Exception as e:
+            mismatches.append(f"Cannot fetch businesses: {e}")
+
+        # Get catalog ownership info
+        if catalog_id:
+            try:
+                # Check catalog details to get business owner
+                resp = requests.get(
+                    f"{GRAPH_BASE}/{catalog_id}",
+                    params={
+                        "access_token": api_instance.token,
+                        "fields": "id,name,business,owner_business",
+                    },
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    cat_data = resp.json()
+                    # Catalog business can be in 'business' or 'owner_business'
+                    cat_biz = cat_data.get("business") or cat_data.get("owner_business")
+                    if cat_biz:
+                        catalog_business_id = cat_biz.get("id") if isinstance(cat_biz, dict) else str(cat_biz)
+            except Exception as e:
+                mismatches.append(f"Cannot verify catalog ownership: {e}")
+
+        # Get Commerce Accounts
+        try:
+            commerce_accounts = api_instance.get_commerce_accounts()
+            commerce_account_ids = [c.get("id") for c in commerce_accounts if c.get("id")]
+        except Exception:
+            pass  # Commerce accounts are optional for some operations
+
+    # === VERIFY CHAIN COHERENCE ===
+
+    # Check 1: Token app_id should be present
+    if not token_app_id:
+        mismatches.append("Token has no associated app_id - cannot verify app ownership")
+
+    # Check 2: At least one business should be accessible
+    if len(business_ids) == 0:
+        mismatches.append("No businesses accessible via this token")
+
+    # Check 3: Catalog should belong to an accessible business
+    if catalog_id and catalog_business_id:
+        if catalog_business_id not in business_ids:
+            mismatches.append(
+                f"MISMATCH: Catalog {catalog_id} belongs to business {catalog_business_id}, "
+                f"but token only has access to: {', '.join(business_ids) or 'no businesses'}"
+            )
+
+    # Check 4: If Commerce Account exists, verify it's accessible
+    # (Less strict - commerce account is optional for some catalog operations)
+
+    chain_coherent = len(mismatches) == 0
+
+    if not chain_coherent:
+        logger.warning(f"ASSET_OWNERSHIP_CHAIN | INCOHERENT | mismatches={len(mismatches)}")
+        for m in mismatches:
+            logger.warning(f"  MISMATCH: {m}")
+    else:
+        logger.info(f"ASSET_OWNERSHIP_CHAIN | COHERENT | businesses={len(business_ids)} | "
+                    f"catalog_owner={catalog_business_id or 'N/A'}")
+
+    return AssetOwnershipChain(
+        token_user_id=token_user_id,
+        token_app_id=token_app_id,
+        business_ids=business_ids,
+        catalog_business_id=catalog_business_id,
+        catalog_id=catalog_id,
+        commerce_account_ids=commerce_account_ids,
+        chain_coherent=chain_coherent,
+        mismatches=mismatches,
+        verified_at=verified_at,
+    )
+
+
+def get_phase4_blocking_reasons(
+    token_meta: dict,
+    operation_mode: str = "interactive",
+    catalog_id: str = None,
+    api_instance=None
+) -> Tuple[FacebookAPIState, List[dict]]:
+    """
+    Get Phase 4 blocking reasons for token lifecycle and asset provenance.
+
+    Per ChatGPT directive:
+    - Logic first, no UI
+    - Only new reasons things are blocked
+    - Uncertain = DEGRADED or BLOCKED
+
+    Args:
+        token_meta: Token metadata from debug_token
+        operation_mode: "interactive" or "background"
+        catalog_id: Catalog ID for asset provenance check
+        api_instance: Optional API instance for additional checks
+
+    Returns:
+        (effective_state, list of blocking/warning issues)
+    """
+    issues = []
+
+    # Assess token lifecycle
+    lifecycle = assess_token_lifecycle(token_meta)
+
+    # Add blocking reasons from lifecycle
+    for reason in lifecycle.blocking_reasons:
+        issues.append({
+            "type": "blocking",
+            "source": "token_lifecycle",
+            "reason": reason,
+            "fix_url": "https://business.facebook.com/settings/system-users",
+        })
+
+    # Add warnings from lifecycle
+    for warning in lifecycle.warnings:
+        issues.append({
+            "type": "warning",
+            "source": "token_lifecycle",
+            "reason": warning,
+            "fix_url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens",
+        })
+
+    # Check background suitability if requested
+    if operation_mode == "background" and not lifecycle.is_background_suitable:
+        issues.append({
+            "type": "blocking",
+            "source": "operation_mode",
+            "reason": f"Token is not suitable for background operations: "
+                      f"type={lifecycle.token_type.value}, fitness={lifecycle.fitness_level.value}",
+            "fix_url": "https://developers.facebook.com/docs/marketing-api/system-users",
+        })
+
+    # Verify asset ownership chain
+    if catalog_id or api_instance:
+        ownership = verify_asset_ownership_chain(token_meta, catalog_id, api_instance)
+
+        for mismatch in ownership.mismatches:
+            issues.append({
+                "type": "blocking",
+                "source": "asset_provenance",
+                "reason": mismatch,
+                "fix_url": "https://business.facebook.com/settings",
+            })
+
+    # Determine effective state
+    blocking_count = sum(1 for i in issues if i["type"] == "blocking")
+    warning_count = sum(1 for i in issues if i["type"] == "warning")
+
+    if blocking_count > 0:
+        effective_state = FacebookAPIState.BLOCKED
+    elif lifecycle.fitness_level == TokenFitnessLevel.DEGRADED:
+        effective_state = FacebookAPIState.DEGRADED
+    elif lifecycle.fitness_level == TokenFitnessLevel.UNKNOWN:
+        effective_state = FacebookAPIState.DEGRADED  # Uncertain = DEGRADED per directive
+    elif warning_count > 0:
+        effective_state = FacebookAPIState.API_READY  # Warnings don't block
+    else:
+        effective_state = FacebookAPIState.API_READY
+
+    logger.info(f"PHASE4_BLOCKING | effective_state={effective_state.name} | "
+                f"blocking={blocking_count} | warnings={warning_count}")
+
+    return effective_state, issues
 
 
 # =============================================================================
