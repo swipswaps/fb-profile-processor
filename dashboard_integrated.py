@@ -921,9 +921,33 @@ def render_setup_wizard():
 
                     with col_skip:
                         if not is_blocking:
-                            if st.button(f"⏭️ Skip (with warning)", key=f"skip_{step_id}"):
+                            # =================================================================
+                            # SKIPPED MUST REMAIN EXCEPTIONAL (per ChatGPT directive)
+                            # SKIPPED is a logged deviation, not a convenience
+                            # Requires explicit "I understand this is not recommended" checkbox
+                            # =================================================================
+                            skip_confirm_key = f"skip_confirm_{step_id}"
+                            if skip_confirm_key not in st.session_state:
+                                st.session_state[skip_confirm_key] = False
+
+                            st.warning("⚠️ **Skipping is NOT recommended**")
+                            st.caption("SKIPPED steps remain in your audit trail as deviations.")
+
+                            skip_confirmed = st.checkbox(
+                                "I understand skipping may cause future issues",
+                                key=skip_confirm_key,
+                                help="SKIPPED ≠ VERIFIED. This will be logged as a deviation."
+                            )
+
+                            if st.button(
+                                f"⏭️ Skip Step (Deviation)",
+                                key=f"skip_{step_id}",
+                                disabled=not skip_confirmed,
+                                help="Requires confirmation checkbox above"
+                            ):
                                 diag.set_manual_verification(step_id, ManualVerificationStatus.SKIPPED)
-                                logger.warning(f"WIZARD: Step {step_id} SKIPPED by user")
+                                logger.warning(f"WIZARD: Step {step_id} SKIPPED by user (DEVIATION - not recommended)")
+                                st.session_state[skip_confirm_key] = False
                                 st.rerun()
                         else:
                             st.caption("❌ This step cannot be skipped")
@@ -2071,9 +2095,17 @@ Image Sources:
         api_status = api.get_api_status()
 
         # Use wizard-derived blocking or fall back to legacy
+        # =================================================================
+        # BLOCKING BANNER MUST NEVER DISAPPEAR PREMATURELY (per ChatGPT)
+        # "All steps complete" ≠ "Marketplace-ready"
+        # Keep banner visible until FULLY API-VERIFIED
+        # =================================================================
         if WIZARD_AVAILABLE and 'wizard_diagnostics' in st.session_state:
             diag = st.session_state.wizard_diagnostics
             wizard_status = diag.get_wizard_status()
+
+            # Get current API state for full verification
+            api_state, api_state_details = get_current_api_state()
 
             if not wizard_status.get('can_proceed_to_api', False):
                 # Manual steps incomplete
@@ -2087,9 +2119,16 @@ Image Sources:
                 st.warning("⚠️ **Catalog Required:** Configure catalog ID below")
             elif not api_status.get('catalog_available'):
                 st.error("🚫 **Catalog Invalid:** Catalog access failed")
+            elif api_state != FacebookAPIState.API_READY:
+                # All basic checks passed but not fully API-VERIFIED
+                # Per ChatGPT: Keep banner visible until API-VERIFIED
+                st.info(f"🔄 **Verification In Progress:** Current state: {api_state.name} — "
+                       f"Full API readiness requires: {api_state_details.get('next_step', 'additional validation')}")
+                logger.info(f"API Config: Not fully verified - state={api_state.name}")
             else:
-                st.success("✅ **API Ready** — All systems operational")
-                logger.info("API Config: All checks passed")
+                # ONLY show success when api_state == API_READY
+                st.success("✅ **API Ready** — All systems operational (API-VERIFIED)")
+                logger.info("API Config: All checks passed, API_READY state confirmed")
         else:
             # Legacy blocking logic
             blocking_issues = []
